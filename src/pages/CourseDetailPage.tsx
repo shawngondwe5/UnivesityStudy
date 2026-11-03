@@ -80,18 +80,17 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
 
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       alert('Please upload a valid PDF document.');
+      e.target.value = '';
       return;
     }
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      let totalPages = 10;
-      try {
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const proxy = await loadingTask.promise;
-        totalPages = proxy.numPages;
-      } catch (e) {
-        console.warn('Could not inspect page count automatically, using default:', e);
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      const proxy = await loadingTask.promise;
+      const totalPages = proxy.numPages;
+      if (totalPages < 1) {
+        throw new Error('The selected PDF does not contain any readable pages.');
       }
 
       const newPdf: PDFDocument = {
@@ -110,8 +109,11 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
       };
 
       await db.pdfs.add(newPdf);
+      e.target.value = '';
     } catch (err) {
       console.error('Failed to parse and store PDF:', err);
+      alert('This file could not be opened as a valid PDF. Please choose another PDF.');
+      e.target.value = '';
     }
   };
 
