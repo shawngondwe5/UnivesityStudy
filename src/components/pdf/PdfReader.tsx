@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import 'pdfjs-dist/web/pdf_viewer.css';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
@@ -13,14 +15,29 @@ import {
   CheckCircle2,
   AlertTriangle,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  StickyNote,
+  Sparkles,
+  X,
+  Save,
+  Trash2
 } from 'lucide-react';
-import type { PDFDocument, StudySession, SessionType, AppSettings } from '../../types';
+import type { PDFDocument, StudySession, SessionType, AppSettings, StudyNote } from '../../types';
 import { db } from '../../db';
 import { formatTimer, getDateKey } from '../../utils/calculations';
 import { useInactivity } from '../../hooks/useInactivity';
 import { FinishReviewModal } from './FinishReviewModal';
 import { ResumePositionModal } from './ResumePositionModal';
+
+// PDF.js text-layer helper. The task is cancelled whenever its page is rerendered.
+async function renderPdfTextLayer(page: pdfjsLib.PDFPageProxy, viewport: any, container: HTMLDivElement) {
+  container.replaceChildren();
+  const textContent = await page.getTextContent();
+  const render = (pdfjsLib as any).renderTextLayer as (options: { textContent: unknown; container: HTMLDivElement; viewport: any; textDivs: HTMLElement[] }) => { promise: Promise<void>; cancel: () => void };
+  const task = render({ textContent, container, viewport, textDivs: [] });
+  await task.promise;
+  return task;
+}
 
 // Set offline local worker bundle, with fallback
 try {
@@ -128,12 +145,87 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   // Modals
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
   const [showResumeModal, setShowResumeModal] = useState<boolean>(false);
+  const [selectedText, setSelectedText] = useState<{ text: string; pageNumber: number; top: number; left: number } | null>(null);
+  const [selectionPanel, setSelectionPanel] = useState<'actions' | 'note' | 'summary' | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [summary, setSummary] = useState('');
+  const [summaryError, setSummaryError] = useState('');
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const notes = useLiveQuery(async () => {
+    const saved = await db.notes.where('pdfId').equals(pdfDoc.id).toArray();
+    return saved.sort((a, b) => b.createdAt - a.createdAt);
+  }, [pdfDoc.id]) || [];
 
+  const readerRootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const textLayerRef = useRef<HTMLDivElement | null>(null);
   const mainScrollContainerRef = useRef<HTMLElement | null>(null);
   const continuousContainerRef = useRef<HTMLDivElement | null>(null);
   const activeThumbnailRef = useRef<HTMLButtonElement | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
+
+  // Keep the floating actions attached to real text selected in the PDF.js layer.
+  useEffect(() => {
+    const root = readerRootRef.current;
+    if (!root) return;
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      const text = selection?.toString().trim() || '';
+      if (!selection || selection.isCollapsed || !text) {
+        if (!selectionPanel) setSelectedText(null);
+        return;
+      }
+      const anchor = selection.anchorNode;
+      const textLayer = anchor instanceof Element ? anchor.closest('.textLayer') : anchor?.parentElement?.closest('.textLayer');
+      if (!textLayer || !root.contains(textLayer)) return;
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+      const pageElement = textLayer.closest('[data-page-number]');
+      setSelectedText({ text: text.slice(0, 12000), pageNumber: Number(pageElement?.getAttribute('data-page-number') || currentPage), top: rect.top, left: rect.left });
+      setSelectionPanel('actions');
+    };
+    const handleOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.pdf-selection-popover, .textLayer')) return;
+      setSelectedText(null);
+      setSelectionPanel(null);
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+    };
+  }, [currentPage, selectionPanel]);
+
+  const handleSaveSelectedNote = async () => {
+    if (!selectedText || !noteDraft.trim()) return;
+    const now = Date.now();
+    const note: StudyNote = { id: crypto.randomUUID(), pdfId: pdfDoc.id, pageNumber: selectedText.pageNumber, selectedText: selectedText.text, noteText: noteDraft.trim(), createdAt: now, updatedAt: now };
+    await db.notes.add(note);
+    setNoteDraft('');
+    setSelectionPanel(null);
+    setSelectedText(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const handleSummarizeSelection = async () => {
+    if (!selectedText) return;
+    setSelectionPanel('summary');
+    setIsSummarizing(true);
+    setSummary('');
+    setSummaryError('');
+    try {
+      const response = await fetch('/api/ai/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: selectedText.text, pageNumber: selectedText.pageNumber, documentName: pdfDoc.filename }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'The summary could not be generated.');
+      setSummary(typeof data.summary === 'string' ? data.summary : '');
+    } catch (error) {
+      setSummaryError(error instanceof Error ? error.message : 'The summary could not be generated.');
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
 
   // Sync reading mode if settings change
   useEffect(() => {
@@ -239,11 +331,12 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     handlePageChange(currentPage);
   }, [currentPage, handlePageChange]);
 
-  // Render current page in single mode
+  // Render current page and its selectable PDF.js text layer in single mode
   useEffect(() => {
     if (!pdfProxy || readingMode !== 'single' || !canvasRef.current) return;
 
     let renderTask: any = null;
+    let textRenderTask: { cancel: () => void } | null = null;
 
     const renderPage = async () => {
       try {
@@ -256,9 +349,17 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
+        canvas.style.width = viewport.width + 'px';
+        canvas.style.height = viewport.height + 'px';
 
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
+        const textLayer = textLayerRef.current;
+        if (textLayer) {
+          textLayer.style.width = viewport.width + 'px';
+          textLayer.style.height = viewport.height + 'px';
+          textRenderTask = await renderPdfTextLayer(page, viewport, textLayer);
+        }
       } catch (err: any) {
         if (err.name !== 'RenderingCancelledException') {
           console.error('Page render error:', err);
@@ -269,6 +370,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     renderPage();
     return () => {
       if (renderTask) renderTask.cancel();
+      textRenderTask?.cancel();
     };
   }, [pdfProxy, currentPage, scale, readingMode]);
 
@@ -286,13 +388,17 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         const page = await pdfProxy.getPage(num);
         const viewport = page.getViewport({ scale });
         const wrapper = document.createElement('div');
-        wrapper.className = 'mb-6 flex flex-col items-center shadow-md';
+        wrapper.className = 'pdf-page-surface mb-6 flex flex-col items-center shadow-md';
         wrapper.id = `continuous-page-${num}`;
         wrapper.setAttribute('data-page-number', String(num));
+        wrapper.style.width = viewport.width + 'px';
+        wrapper.style.height = viewport.height + 'px';
 
         const canvas = document.createElement('canvas');
         canvas.height = viewport.height;
         canvas.width = viewport.width;
+        canvas.style.width = viewport.width + 'px';
+        canvas.style.height = viewport.height + 'px';
         const ctx = canvas.getContext('2d');
         if (ctx) {
           await page.render({ canvasContext: ctx, viewport }).promise;
@@ -302,9 +408,15 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         label.className = 'text-xs text-slate-400 mt-2 font-mono';
         label.innerText = `Page ${num}`;
 
+        const textLayer = document.createElement('div');
+        textLayer.className = 'textLayer pdf-text-layer';
+        textLayer.style.width = viewport.width + 'px';
+        textLayer.style.height = viewport.height + 'px';
         wrapper.appendChild(canvas);
+        wrapper.appendChild(textLayer);
         wrapper.appendChild(label);
         container.appendChild(wrapper);
+        await renderPdfTextLayer(page, viewport, textLayer);
       }
     };
 
@@ -548,7 +660,8 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     <div
       role="region"
       aria-label="PDF Reader Workspace"
-      className="pdf-reader fixed inset-0 z-40 flex flex-col select-none"
+      ref={readerRootRef}
+      className="pdf-reader fixed inset-0 z-40 flex flex-col"
     >
       {/* Top Header & Reading Controls */}
       <header className="pdf-reader-header flex items-center justify-between px-5 py-3 border-b">
@@ -632,8 +745,11 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
           </button>
         </div>
 
-        {/* View Mode & Zoom Controls */}
+        {/* View Mode, saved notes and zoom controls */}
         <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setShowNotes(true)} className="pdf-reader-control flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-sky-50" aria-label={`Open notes, ${notes.length} saved`} title="Saved notes">
+            <StickyNote className="h-4 w-4" /><span className="hidden sm:inline">Notes {notes.length > 0 ? `(${notes.length})` : ''}</span>
+          </button>
           <button
             type="button"
             onClick={() => setIsPagePanelOpen(open => !open)}
@@ -761,10 +877,10 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         >
           {readingMode === 'single' ? (
             <div className="flex flex-col items-center pb-20">
-              <canvas
-                ref={canvasRef}
-                className="pdf-reader-page-canvas max-w-full shadow-xl rounded-sm bg-white border border-slate-200"
-              />
+              <div className="pdf-page-surface" data-page-number={currentPage}>
+                <canvas ref={canvasRef} className="pdf-reader-page-canvas max-w-full shadow-xl rounded-sm bg-white border border-slate-200" />
+                <div ref={textLayerRef} className="textLayer pdf-text-layer" />
+              </div>
             </div>
           ) : (
             <div ref={continuousContainerRef} className="w-full flex flex-col items-center pb-24" />
@@ -796,6 +912,38 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
           </div>
         </main>
       </div>
+
+      {selectedText && selectionPanel && (
+        <div className="pdf-selection-popover" style={{ top: Math.max(12, selectedText.top - 58), left: Math.max(12, Math.min(selectedText.left, window.innerWidth - 290)) }} aria-label="Selected text actions">
+          {selectionPanel === 'actions' && <div className="flex items-center gap-1" onMouseDown={event => event.preventDefault()}>
+            <button type="button" onClick={() => { setNoteDraft(''); setSelectionPanel('note'); }} className="pdf-selection-action"><StickyNote className="h-4 w-4" /><span>Add note</span></button>
+            <button type="button" onClick={handleSummarizeSelection} className="pdf-selection-action pdf-selection-ai"><Sparkles className="h-4 w-4" /><span>Summarize</span></button>
+            <button type="button" onClick={() => { setSelectionPanel(null); setSelectedText(null); }} className="pdf-selection-close" aria-label="Hide selection actions" title="Hide"><X className="h-4 w-4" /></button>
+          </div>}
+          {selectionPanel === 'note' && <div className="w-72 space-y-2">
+            <div className="flex items-center justify-between gap-2"><strong className="text-xs">Quick note · Page {selectedText.pageNumber}</strong><button type="button" onClick={() => setSelectionPanel('actions')} aria-label="Back to selection actions"><X className="h-4 w-4" /></button></div>
+            <p className="pdf-selection-quote">“{selectedText.text.slice(0, 180)}{selectedText.text.length > 180 ? '…' : ''}”</p>
+            <textarea autoFocus rows={3} maxLength={500} value={noteDraft} onChange={event => setNoteDraft(event.target.value)} placeholder="Write a short note about this passage…" className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-800 outline-none focus:border-sky-400" />
+            <div className="flex justify-end"><button type="button" onClick={handleSaveSelectedNote} disabled={!noteDraft.trim()} className="pdf-selection-save"><Save className="h-3.5 w-3.5" /> Save note</button></div>
+          </div>}
+          {selectionPanel === 'summary' && <div className="w-80 max-w-[calc(100vw-48px)] space-y-2">
+            <div className="flex items-center justify-between gap-2"><strong className="text-xs flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> AI summary</strong><button type="button" onClick={() => setSelectionPanel('actions')} aria-label="Back to selection actions"><X className="h-4 w-4" /></button></div>
+            {isSummarizing ? <p className="text-xs text-slate-500">Reading the selected passage…</p> : summaryError ? <p className="text-xs text-rose-600">{summaryError}</p> : <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{summary}</p>}
+            {!isSummarizing && !summaryError && summary && <button type="button" onClick={() => { setSelectionPanel(null); setSelectedText(null); window.getSelection()?.removeAllRanges(); }} className="pdf-selection-save">Done</button>}
+            {summaryError && <button type="button" onClick={handleSummarizeSelection} className="pdf-selection-save">Try again</button>}
+          </div>}
+        </div>
+      )}
+
+      {showNotes && <aside className="pdf-notes-panel" aria-label="Saved PDF notes">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><div><h3 className="text-sm font-bold text-slate-900">Your notes</h3><p className="text-[11px] text-slate-500">{notes.length} saved for this PDF</p></div><button type="button" onClick={() => setShowNotes(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close notes"><X className="h-4 w-4" /></button></div>
+        <div className="flex-1 space-y-3 overflow-y-auto p-3">
+          {notes.length === 0 ? <div className="py-10 text-center text-xs text-slate-400">No notes yet. Select text and choose Add note.</div> : notes.map(note => <article key={note.id} className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+            <div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-wide text-sky-700">Page {note.pageNumber}</span><button type="button" onClick={() => db.notes.delete(note.id)} className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Delete note"><Trash2 className="h-3.5 w-3.5" /></button></div>
+            <p className="mb-2 border-l-2 border-sky-300 pl-2 text-[11px] italic text-slate-500">{note.selectedText}</p><p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-800">{note.noteText}</p>
+          </article>)}
+        </div>
+      </aside>}
 
       {/* Modals */}
       <FinishReviewModal
