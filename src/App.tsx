@@ -59,10 +59,10 @@ export const App: React.FC = () => {
   }, []);
 
   // Settings state
-  const liveSettings = useLiveQuery(
-    () => databaseReady ? db.settings.get('user-settings') : Promise.resolve(undefined),
-    [databaseReady]
-  );
+  const liveSettings = useLiveQuery(async () => {
+    if (!databaseReady) return undefined;
+    return await db.settings.get('user-settings');
+  }, [databaseReady]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
   useEffect(() => {
@@ -82,22 +82,22 @@ export const App: React.FC = () => {
   }, [settings?.theme]);
 
   // Reactive IndexedDB queries via Dexie hooks
-  const liveCourses = useLiveQuery(
-    () => databaseReady ? db.courses.toArray() : Promise.resolve(undefined),
-    [databaseReady]
-  );
-  const liveLectures = useLiveQuery(
-    () => databaseReady ? db.lectures.toArray() : Promise.resolve(undefined),
-    [databaseReady]
-  );
-  const livePdfs = useLiveQuery(
-    () => databaseReady ? db.pdfs.toArray() : Promise.resolve(undefined),
-    [databaseReady]
-  );
-  const liveSessions = useLiveQuery(
-    () => databaseReady ? db.sessions.toArray() : Promise.resolve(undefined),
-    [databaseReady]
-  );
+  const liveCourses = useLiveQuery(async () => {
+    if (!databaseReady) return undefined;
+    return await db.courses.toArray();
+  }, [databaseReady]);
+  const liveLectures = useLiveQuery(async () => {
+    if (!databaseReady) return undefined;
+    return await db.lectures.toArray();
+  }, [databaseReady]);
+  const livePdfs = useLiveQuery(async () => {
+    if (!databaseReady) return undefined;
+    return await db.pdfs.toArray();
+  }, [databaseReady]);
+  const liveSessions = useLiveQuery(async () => {
+    if (!databaseReady) return undefined;
+    return await db.sessions.toArray();
+  }, [databaseReady]);
   const courses = liveCourses ?? [];
   const lectures = liveLectures ?? [];
   const pdfs = livePdfs ?? [];
