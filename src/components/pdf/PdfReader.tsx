@@ -497,11 +497,15 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     }
   }, [currentPage]);
 
-  const handleSearch = (query: string, previous = false) => {
+  const handleSearch = (query: string, again = false, previous = false) => {
     setSearchQuery(query);
-    setSearchMatches({ current: 0, total: 0 });
-    if (!query.trim()) return;
-    pdfFindControllerRef.current?.executeCommand(previous ? 'findagain' : 'find', {
+    if (!query.trim()) {
+      setSearchMatches({ current: 0, total: 0 });
+      pdfFindControllerRef.current?.executeCommand('find', { query: '' });
+      return;
+    }
+    if (!again) setSearchMatches({ current: 0, total: 0 });
+    pdfFindControllerRef.current?.executeCommand(again ? 'findagain' : 'find', {
       query,
       phraseSearch: true,
       caseSensitive: false,
@@ -811,7 +815,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
           <div className="pdf-reader-control flex items-center rounded-xl p-1 border">
             <button
               type="button"
-              onClick={() => setScale(s => Math.max(0.6, s - 0.2))}
+              onClick={() => pdfViewerRef.current?.decreaseScale()}
               aria-label="Zoom out"
               className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 cursor-pointer"
               title="Zoom Out"
@@ -821,7 +825,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             <span className="text-xs font-mono px-2 text-slate-500">{Math.round(scale * 100)}%</span>
             <button
               type="button"
-              onClick={() => setScale(s => Math.min(2.5, s + 0.2))}
+              onClick={() => pdfViewerRef.current?.increaseScale()}
               aria-label="Zoom in"
               className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 cursor-pointer"
               title="Zoom In"
@@ -1004,8 +1008,8 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
           />
           <span className="whitespace-nowrap text-[11px] text-slate-500">{searchMatches.total ? `${searchMatches.current} of ${searchMatches.total}` : searchQuery ? 'No matches yet' : ''}</span>
-          <button type="button" onClick={() => handleSearch(searchQuery, true)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Previous match"><ChevronLeft className="h-4 w-4" /></button>
-          <button type="button" onClick={() => handleSearch(searchQuery)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Next match"><ChevronRight className="h-4 w-4" /></button>
+          <button type="button" onClick={() => handleSearch(searchQuery, true, true)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Previous match"><ChevronLeft className="h-4 w-4" /></button>
+          <button type="button" onClick={() => handleSearch(searchQuery, true, false)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Next match"><ChevronRight className="h-4 w-4" /></button>
           <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(''); setSearchMatches({ current: 0, total: 0 }); pdfFindControllerRef.current?.executeCommand('find', { query: '' }); }} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Close search"><X className="h-4 w-4" /></button>
         </div>
       )}
