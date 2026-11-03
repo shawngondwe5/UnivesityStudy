@@ -344,3 +344,30 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
   .pdf-thumbnail-preview { min-height: 90px; }
   .pdf-reader-canvas { padding: 12px; }
 }
+
+
+/* PDF reader navigation, compact controls and narrow-screen layout. */
+.pdf-reader-page-canvas { height: auto; }
+.pdf-reader-sidebar { min-width: 0; }
+.pdf-reader-header > div { min-width: 0; }
+.pdf-reader-header > div:first-child > div { min-width: 0; }
+.pdf-reader-canvas canvas { max-width: 100%; height: auto; }
+@media (max-width: 720px) {
+  .pdf-reader-header { align-items: flex-start; }
+  .pdf-reader-header > div:first-child { flex: 1 1 48%; min-width: 0; gap: 8px; }
+  .pdf-reader-header > div:first-child > div { max-width: calc(100vw - 100px); }
+  .pdf-reader-header > div:last-child { flex: 1 1 100%; justify-content: space-between; flex-wrap: wrap; }
+  .pdf-reader-header > div:last-child > * { min-width: 0; }
+  .pdf-reader-toolbar { order: 4; }
+  .pdf-reader-sidebar { width: min(76vw, 260px); max-width: 260px; }
+  .pdf-reader-canvas { padding: 10px; }
+  .pdf-reader-pagination { bottom: max(12px, env(safe-area-inset-bottom)); gap: 10px; padding: 7px 12px; }
+  .pdf-reader-page-canvas { width: 100%; }
+}
+@media (max-width: 420px) {
+  .pdf-reader-header { padding: 8px; }
+  .pdf-reader-header > div:first-child > div { max-width: calc(100vw - 90px); }
+  .pdf-reader-toolbar { padding: 6px 8px; }
+  .pdf-reader-toolbar select { max-width: 105px; }
+  .pdf-reader-sidebar { width: min(82vw, 240px); }
+}
