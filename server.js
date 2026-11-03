@@ -7,10 +7,26 @@ import { createServer as createViteServer } from 'vite';
 const app = express();
 const port = Number(process.env.PORT) || 3000;
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
+const summarizeRateWindows = new Map();
+app.set('trust proxy', 1);
 
 app.use(express.json({ limit: '24kb' }));
 
 app.post('/api/ai/summarize', async (req, res) => {
+  const now = Date.now();
+  const clientKey = req.ip || req.socket.remoteAddress || 'unknown';
+  const currentWindow = summarizeRateWindows.get(clientKey);
+  if (!currentWindow || now - currentWindow.startedAt >= 60_000) {
+    if (summarizeRateWindows.size > 5000) {
+      for (const [key, value] of summarizeRateWindows) if (now - value.startedAt >= 60_000) summarizeRateWindows.delete(key);
+    }
+    summarizeRateWindows.set(clientKey, { startedAt: now, count: 1 });
+  } else if (currentWindow.count >= 12) {
+    return res.status(429).json({ error: 'Too many summaries in a short time. Please wait a minute and try again.' });
+  } else {
+    currentWindow.count += 1;
+  }
+
   const selectedText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   const pageNumber = Number.isInteger(req.body?.pageNumber) ? req.body.pageNumber : null;
   const documentName = typeof req.body?.documentName === 'string' ? req.body.documentName.slice(0, 160) : 'PDF document';
