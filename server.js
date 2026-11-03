@@ -32,7 +32,7 @@ app.post('/api/ai/summarize', async (req, res) => {
   }
 });
 
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === 'production' || process.env.K_SERVICE) {
   app.use(express.static(path.join(rootDir, 'dist')));
   app.get('*', (_req, res) => res.sendFile(path.join(rootDir, 'dist', 'index.html')));
 } else {
