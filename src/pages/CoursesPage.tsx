@@ -122,7 +122,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
             return (
               <article
                 key={course.id}
-                className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-blue-500 dark:hover:border-blue-500 transition flex flex-col justify-between group"
+                className="course-library-card p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-blue-500 dark:hover:border-blue-500 transition flex flex-col justify-between group"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
