@@ -12,9 +12,33 @@ import { SettingsPage } from './pages/SettingsPage';
 import { PdfReader } from './components/pdf/PdfReader';
 
 export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  const [currentTab, setCurrentTab] = useState<string>(() => {
+    try {
+      const saved = sessionStorage.getItem('university-study-navigation');
+      const parsed = saved ? JSON.parse(saved) as { currentTab?: string } : null;
+      return parsed?.currentTab || 'dashboard';
+    } catch {
+      return 'dashboard';
+    }
+  });
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
+  const [activeCourseId, setActiveCourseId] = useState<string | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('university-study-navigation');
+      const parsed = saved ? JSON.parse(saved) as { activeCourseId?: string | null } : null;
+      return parsed?.activeCourseId || null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Keep the current section/course when the page is refreshed in this tab.
+  useEffect(() => {
+    sessionStorage.setItem(
+      'university-study-navigation',
+      JSON.stringify({ currentTab, activeCourseId })
+    );
+  }, [currentTab, activeCourseId]);
 
   // Active PDF reader state
   const [activePdfState, setActivePdfState] = useState<{
