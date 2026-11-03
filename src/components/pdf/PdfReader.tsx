@@ -29,20 +29,23 @@ import { useInactivity } from '../../hooks/useInactivity';
 import { FinishReviewModal } from './FinishReviewModal';
 import { ResumePositionModal } from './ResumePositionModal';
 
-// PDF.js text-layer helper. The task is cancelled whenever its page is rerendered.
-async function renderPdfTextLayer(page: pdfjsLib.PDFPageProxy, viewport: any, container: HTMLDivElement) {
+// Build the selectable text layer separately from the page bitmap.
+// Returning the task before awaiting it lets page navigation/virtualization cancel stale work.
+async function renderPdfTextLayer(
+  page: pdfjsLib.PDFPageProxy,
+  viewport: any,
+  container: HTMLDivElement,
+  isCancelled: () => boolean = () => false
+) {
   container.replaceChildren();
-  // PDF.js 3.x uses this CSS variable when calculating selectable text spans.
-  // Without it the text layer can render at zero/incorrect scale and be impossible to select.
   container.style.setProperty('--scale-factor', String(viewport.scale));
   container.style.position = 'absolute';
   container.style.inset = '0 auto auto 0';
   container.style.zIndex = '2';
   const textContent = await page.getTextContent();
+  if (isCancelled()) return null;
   const render = (pdfjsLib as any).renderTextLayer as (options: { textContent: unknown; container: HTMLDivElement; viewport: any; textDivs: HTMLElement[] }) => { promise: Promise<void>; cancel: () => void };
-  const task = render({ textContent, container, viewport, textDivs: [] });
-  await task.promise;
-  return task;
+  return render({ textContent, container, viewport, textDivs: [] });
 }
 
 // Set offline local worker bundle, with fallback
@@ -85,11 +88,18 @@ const PdfPageThumbnail: React.FC<{
         const scale = Math.min(112 / base.width, 148 / base.height);
         const viewport = page.getViewport({ scale });
         const canvas = canvasRef.current;
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.ceil(viewport.width * outputScale);
+        canvas.height = Math.ceil(viewport.height * outputScale);
+        canvas.style.width = viewport.width + 'px';
+        canvas.style.height = viewport.height + 'px';
         const context = canvas.getContext('2d');
         if (!context) return;
-        renderTask = page.render({ canvasContext: context, viewport });
+        renderTask = page.render({
+          canvasContext: context,
+          viewport,
+          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0]
+        });
         await renderTask.promise;
       } catch (error) {
         if (!cancelled) console.error('Thumbnail render failed:', error);
@@ -340,39 +350,46 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     handlePageChange(currentPage);
   }, [currentPage, handlePageChange]);
 
-  // Render current page and its selectable PDF.js text layer in single mode
+  // Render the active page at device-pixel resolution for crisp text and graphics.
   useEffect(() => {
     if (!pdfProxy || readingMode !== 'single' || !canvasRef.current) return;
 
-    let renderTask: any = null;
-    let textRenderTask: { cancel: () => void } | null = null;
+    let cancelled = false;
+    let renderTask: pdfjsLib.RenderTask | null = null;
+    let textRenderTask: { cancel: () => void; promise: Promise<void> } | null = null;
 
     const renderPage = async () => {
       try {
         const page = await pdfProxy.getPage(currentPage);
+        if (cancelled) return;
         const viewport = page.getViewport({ scale });
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
         const canvas = canvasRef.current;
         if (!canvas) return;
         const context = canvas.getContext('2d');
         if (!context) return;
 
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+        canvas.width = Math.ceil(viewport.width * outputScale);
+        canvas.height = Math.ceil(viewport.height * outputScale);
         canvas.style.width = viewport.width + 'px';
         canvas.style.height = viewport.height + 'px';
-
-        renderTask = page.render({ canvasContext: context, viewport });
-        await renderTask.promise;
         const textLayer = textLayerRef.current;
         if (textLayer) {
           textLayer.style.width = viewport.width + 'px';
           textLayer.style.height = viewport.height + 'px';
-          textLayer.style.setProperty('--scale-factor', String(viewport.scale));
-          textLayer.style.zIndex = '2';
-          textRenderTask = await renderPdfTextLayer(page, viewport, textLayer);
         }
+
+        renderTask = page.render({
+          canvasContext: context,
+          viewport,
+          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0]
+        });
+        await renderTask.promise;
+        if (cancelled || !textLayer) return;
+        textRenderTask = await renderPdfTextLayer(page, viewport, textLayer, () => cancelled);
+        await textRenderTask?.promise;
       } catch (err: any) {
-        if (err.name !== 'RenderingCancelledException') {
+        if (!cancelled && err.name !== 'RenderingCancelledException') {
           console.error('Page render error:', err);
         }
       }
@@ -380,44 +397,117 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
     renderPage();
     return () => {
-      if (renderTask) renderTask.cancel();
+      cancelled = true;
+      renderTask?.cancel();
       textRenderTask?.cancel();
     };
   }, [pdfProxy, currentPage, scale, readingMode]);
 
-  // Render all pages in continuous scrolling mode
+  // Chrome's PDFium viewer calculates the visible-page set on scroll, paints only
+  // those pages, cancels obsolete paints and unloads pages outside the viewport.
+  // Mirror that strategy here: keep lightweight page placeholders, rasterize only
+  // pages near the viewport, and release their canvases/text spans when far away.
   useEffect(() => {
     if (!pdfProxy || readingMode !== 'continuous' || !continuousContainerRef.current) return;
 
-    let isCancelled = false;
+    let disposed = false;
     const container = continuousContainerRef.current;
-    container.innerHTML = '';
+    const scrollRoot = mainScrollContainerRef.current;
+    container.replaceChildren();
 
-    const renderAllPages = async () => {
+    type VirtualPage = {
+      page: pdfjsLib.PDFPageProxy;
+      viewport: any;
+      canvas: HTMLCanvasElement;
+      textLayer: HTMLDivElement;
+      renderTask: pdfjsLib.RenderTask | null;
+      textTask: { cancel: () => void; promise: Promise<void> } | null;
+      generation: number;
+      visible: boolean;
+      rendered: boolean;
+      rendering: boolean;
+    };
+    const states = new Map<number, VirtualPage>();
+
+    const renderPage = async (state: VirtualPage) => {
+      if (disposed || state.rendering || state.rendered) return;
+      state.rendering = true;
+      const generation = ++state.generation;
+      try {
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+        state.canvas.width = Math.ceil(state.viewport.width * outputScale);
+        state.canvas.height = Math.ceil(state.viewport.height * outputScale);
+        state.canvas.style.width = state.viewport.width + 'px';
+        state.canvas.style.height = state.viewport.height + 'px';
+        const context = state.canvas.getContext('2d');
+        if (!context) return;
+        state.renderTask = state.page.render({
+          canvasContext: context,
+          viewport: state.viewport,
+          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0]
+        });
+        await state.renderTask.promise;
+        if (disposed || generation !== state.generation || !state.visible) return;
+        state.textTask = await renderPdfTextLayer(
+          state.page,
+          state.viewport,
+          state.textLayer,
+          () => disposed || generation !== state.generation || !state.visible
+        );
+        await state.textTask?.promise;
+        if (!disposed && generation === state.generation) state.rendered = true;
+      } catch (error: any) {
+        if (!disposed && error.name !== 'RenderingCancelledException') {
+          console.error('Continuous PDF page render failed:', error);
+        }
+      } finally {
+        if (generation === state.generation) state.rendering = false;
+      }
+    };
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        const pageNumber = Number((entry.target as HTMLElement).dataset.pageNumber);
+        const state = states.get(pageNumber);
+        if (!state) return;
+        state.visible = entry.isIntersecting;
+        if (entry.isIntersecting) {
+          void renderPage(state);
+        } else if (state.rendering || state.rendered) {
+          // Pages outside the prefetch window no longer consume canvas memory.
+          state.generation++;
+          state.renderTask?.cancel();
+          state.textTask?.cancel();
+          state.renderTask = null;
+          state.textTask = null;
+          state.rendered = false;
+          state.rendering = false;
+          state.canvas.width = 0;
+          state.canvas.height = 0;
+          state.textLayer.replaceChildren();
+        }
+      });
+    }, { root: scrollRoot, rootMargin: '1100px 0px' });
+
+    const buildPlaceholders = async () => {
       for (let num = 1; num <= pdfProxy.numPages; num++) {
-        if (isCancelled) break;
+        if (disposed) return;
         const page = await pdfProxy.getPage(num);
+        if (disposed) return;
         const viewport = page.getViewport({ scale });
         const wrapper = document.createElement('div');
         wrapper.className = 'pdf-page-surface mb-6 shadow-md';
         wrapper.id = `continuous-page-${num}`;
-        wrapper.setAttribute('data-page-number', String(num));
+        wrapper.dataset.pageNumber = String(num);
         wrapper.style.width = viewport.width + 'px';
         wrapper.style.height = viewport.height + 'px';
+        wrapper.style.contain = 'layout paint style';
 
         const canvas = document.createElement('canvas');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
         canvas.style.width = viewport.width + 'px';
         canvas.style.height = viewport.height + 'px';
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          await page.render({ canvasContext: ctx, viewport }).promise;
-        }
-
-        const label = document.createElement('div');
-        label.className = 'text-xs text-slate-400 mt-2 font-mono';
-        label.innerText = `Page ${num}`;
+        canvas.style.position = 'relative';
+        canvas.style.zIndex = '0';
 
         const textLayer = document.createElement('div');
         textLayer.className = 'textLayer pdf-text-layer';
@@ -425,19 +515,29 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         textLayer.style.height = viewport.height + 'px';
         textLayer.style.setProperty('--scale-factor', String(viewport.scale));
         textLayer.style.zIndex = '2';
-        canvas.style.position = 'relative';
-        canvas.style.zIndex = '0';
+
         wrapper.appendChild(canvas);
         wrapper.appendChild(textLayer);
-        wrapper.appendChild(label);
         container.appendChild(wrapper);
-        await renderPdfTextLayer(page, viewport, textLayer);
+        states.set(num, {
+          page, viewport, canvas, textLayer, renderTask: null, textTask: null,
+          generation: 0, visible: false, rendered: false, rendering: false
+        });
+        observer.observe(wrapper);
       }
     };
 
-    renderAllPages();
+    void buildPlaceholders();
     return () => {
-      isCancelled = true;
+      disposed = true;
+      observer.disconnect();
+      states.forEach(state => {
+        state.generation++;
+        state.renderTask?.cancel();
+        state.textTask?.cancel();
+      });
+      states.clear();
+      container.replaceChildren();
     };
   }, [pdfProxy, readingMode, scale]);
 
