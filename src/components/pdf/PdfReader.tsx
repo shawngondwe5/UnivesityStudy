@@ -703,7 +703,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
                       : ''
                   }`}
                 >
-                  <PdfPageThumbnail pdf={pdfProxy} pageNumber={pageNumber} />
+                  {pdfProxy ? <PdfPageThumbnail pdf={pdfProxy} pageNumber={pageNumber} /> : <div className="pdf-thumbnail-preview"><div className="pdf-thumbnail-skeleton" /></div>}
                   <div className="flex items-center justify-between gap-2 px-1">
                     <span className="font-semibold text-slate-700">Page {pageNumber}</span>
 
@@ -722,6 +722,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
                         Unread
                       </span>
                     )}
+                  </div>
                   </div>
                 </button>
               );
