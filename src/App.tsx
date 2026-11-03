@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, getSettings, initializeDatabase } from './db';
+import { db, initializeDatabase } from './db';
 import type { PDFDocument, AppSettings } from './types';
 import { Sidebar } from './components/layout/Sidebar';
 import { Dashboard } from './pages/Dashboard';
@@ -47,16 +47,23 @@ export const App: React.FC = () => {
     lectureName: string;
   } | null>(null);
 
-  // Settings state
-  const liveSettings = useLiveQuery(async () => {
-    await initializeDatabase();
-    return db.settings.get('user-settings');
-  });
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-
+  // Initialize IndexedDB once, outside the reactive queries. Each live query
+  // then tracks only the table it reads, so writes immediately refresh the UI.
+  const [databaseReady, setDatabaseReady] = useState(false);
   useEffect(() => {
-    getSettings().then(setSettings);
+    let active = true;
+    initializeDatabase()
+      .then(() => { if (active) setDatabaseReady(true); })
+      .catch(error => console.error('Database initialization failed:', error));
+    return () => { active = false; };
   }, []);
+
+  // Settings state
+  const liveSettings = useLiveQuery(
+    () => databaseReady ? db.settings.get('user-settings') : Promise.resolve(undefined),
+    [databaseReady]
+  );
+  const [settings, setSettings] = useState<AppSettings | null>(null);
 
   useEffect(() => {
     if (liveSettings) {
@@ -75,24 +82,38 @@ export const App: React.FC = () => {
   }, [settings?.theme]);
 
   // Reactive IndexedDB queries via Dexie hooks
-  const courses = useLiveQuery(async () => {
-    await initializeDatabase();
-    return db.courses.toArray();
-  }, []) || [];
-  const lectures = useLiveQuery(async () => {
-    await initializeDatabase();
-    return db.lectures.toArray();
-  }, []) || [];
-  const pdfs = useLiveQuery(async () => {
-    await initializeDatabase();
-    return db.pdfs.toArray();
-  }, []) || [];
-  const sessions = useLiveQuery(async () => {
-    await initializeDatabase();
-    return db.sessions.toArray();
-  }, []) || [];
+  const liveCourses = useLiveQuery(
+    () => databaseReady ? db.courses.toArray() : Promise.resolve([]),
+    [databaseReady]
+  );
+  const liveLectures = useLiveQuery(
+    () => databaseReady ? db.lectures.toArray() : Promise.resolve([]),
+    [databaseReady]
+  );
+  const livePdfs = useLiveQuery(
+    () => databaseReady ? db.pdfs.toArray() : Promise.resolve([]),
+    [databaseReady]
+  );
+  const liveSessions = useLiveQuery(
+    () => databaseReady ? db.sessions.toArray() : Promise.resolve([]),
+    [databaseReady]
+  );
+  const courses = liveCourses ?? [];
+  const lectures = liveLectures ?? [];
+  const pdfs = livePdfs ?? [];
+  const sessions = liveSessions ?? [];
 
-  if (!settings) return null;
+  // A deleted or missing saved course must never leave a blank detail screen.
+  useEffect(() => {
+    if (!databaseReady || currentTab !== 'course-detail' || liveCourses === undefined) return;
+    const exists = activeCourseId && liveCourses.some(course => course.id === activeCourseId && !course.isDeleted);
+    if (!exists) {
+      setActiveCourseId(null);
+      setCurrentTab('courses');
+    }
+  }, [databaseReady, currentTab, activeCourseId, liveCourses]);
+
+  if (!settings || !databaseReady) return null;
 
   const handleOpenCourse = (courseId: string) => {
     setActiveCourseId(courseId);
