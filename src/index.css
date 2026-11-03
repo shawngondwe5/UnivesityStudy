@@ -732,3 +732,55 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
   .pdf-reader-toolbar { gap: 3px !important; }
   .pdf-reader-toolbar select { max-width: 82px; }
 }
+
+
+/* High-visibility study-note cards: vivid colour with strong text contrast. */
+.pdf-note-popup {
+  color: #17232d !important;
+  border: 1px solid rgba(23, 35, 45, .28) !important;
+  box-shadow: 0 18px 48px rgba(13, 31, 43, .3), 0 3px 10px rgba(13, 31, 43, .12) !important;
+}
+.pdf-note-popup-header {
+  background: rgba(255, 255, 255, .48) !important;
+  border-bottom: 1px solid rgba(23, 35, 45, .2) !important;
+}
+.pdf-note-popup-header strong,
+.pdf-note-popup-content,
+.pdf-note-body,
+.pdf-note-ai,
+.pdf-note-field-label,
+.pdf-note-edit-options,
+.pdf-note-meta {
+  color: #17232d !important;
+}
+.pdf-note-popup-header span,
+.pdf-note-meta { color: #263744 !important; opacity: 1 !important; }
+.pdf-note-selected {
+  background: rgba(255, 255, 255, .66) !important;
+  border-left-color: #17232d !important;
+  color: #17232d !important;
+}
+.pdf-note-ai { background: rgba(255, 255, 255, .68) !important; }
+.pdf-note-edit {
+  background: rgba(255, 255, 255, .88) !important;
+  border: 1px solid rgba(23, 35, 45, .38) !important;
+  color: #17232d !important;
+}
+.pdf-note-edit::placeholder { color: #52616b; opacity: 1; }
+.pdf-note-formatting button,
+.pdf-note-actions button,
+.pdf-note-popup-header button,
+.pdf-note-popup-content button:not(.pdf-note-save) {
+  background: rgba(255, 255, 255, .62);
+  color: #17232d !important;
+}
+.pdf-note-formatting button:hover,
+.pdf-note-actions button:hover,
+.pdf-note-popup-header button:hover,
+.pdf-note-popup-content button:not(.pdf-note-save):hover {
+  background: rgba(255, 255, 255, .9) !important;
+}
+.pdf-note-save {
+  background: #17232d !important;
+  color: #fff !important;
+}
