@@ -234,7 +234,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up); window.addEventListener('keydown', key); document.addEventListener('pointerdown', outside);
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); window.removeEventListener('keydown', key); document.removeEventListener('pointerdown', outside); };
   }, [activeNotePopup?.noteId, activeNotePopup?.pinned, pdfDoc.id]);
-  useEffect(() => { const note = notes.find(item => item.id === activeNotePopup?.noteId); if (note) setNoteEditDraft(note.noteText || ''); }, [activeNotePopup?.noteId, notes]);
+  useEffect(() => { const note = notes.find(item => item.id === activeNotePopup?.noteId); if (note) setNoteEditDraft(note.noteText || ''); }, [activeNotePopup?.noteId]);
 
   // Keep the connector attached to the saved PDF-space highlight while the
   // page, viewer, or card moves. Only one card can be open at a time.
