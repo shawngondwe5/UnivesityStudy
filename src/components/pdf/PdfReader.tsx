@@ -56,6 +56,20 @@ try {
 const stripAiFormatting = (value: string) => value.replace(/```[\s\S]*?```/g, block => block.replace(/^```[^\n]*\n?|```$/g, '')).replace(/\*\*(.*?)\*\*/g, '$1').replace(/__(.*?)__/g, '$1').replace(/^\s{0,3}#{1,6}\s+/gm, '').replace(/^\s*\*\s+/gm, '• ').replace(/^\s*-\s+/gm, '• ').trim();
 const HIGHLIGHT_COLORS: Record<string, string> = { yellow: 'rgba(255,214,10,.48)', green: 'rgba(52,211,153,.42)', pink: 'rgba(244,114,182,.40)', blue: 'rgba(96,165,250,.42)', orange: 'rgba(249,115,22,.48)' };
 const NOTE_CARD_COLORS: Record<string, string> = { yellow: '#fff2b8', green: '#d8f5df', pink: '#fbe0ed', blue: '#dcecff', orange: '#ffe3c7' };
+const renderNoteInline = (line: string) => line.split(/(\\*\\*.*?\\*\\*|_.*?_|<u>.*?<\\/u>)/g).map((part, index) => {
+  if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
+  if (part.startsWith('_') && part.endsWith('_')) return <em key={index}>{part.slice(1, -1)}</em>;
+  if (part.startsWith('<u>') && part.endsWith('</u>')) return <u key={index}>{part.slice(3, -4)}</u>;
+  return part;
+});
+const renderStudyNoteText = (value: string) => {
+  const lines = value.split(/\\r?\\n/);
+  const items = lines.filter(line => /^\\s*•\\s+/.test(line));
+  if (items.length === lines.length) return <ul className="list-disc pl-5">{items.map((line, index) => <li key={index}>{renderNoteInline(line.replace(/^\\s*•\\s+/, ''))}</li>)}</ul>;
+  return lines.map((line, index) => /^\\s*•\\s+/.test(line)
+    ? <p key={index} className="pl-3">{renderNoteInline(line)}</p>
+    : <p key={index}>{renderNoteInline(line)}</p>);
+};
 
 const PdfPageThumbnail: React.FC<{
   pdf: pdfjsLib.PDFDocumentProxy;
@@ -326,6 +340,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     setNoteDraft('');
     setSelectionPanel(null);
     openNotePopup(note.id, 'edit');
+    setNoteEditDraft(note.noteText);
     setSelectedText(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -1142,7 +1157,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
           <div className="pdf-note-popup-content">
             <p className="pdf-note-selected">{note.selectedText}</p>
             {notePopupMode === 'info' ? <>
-              {note.noteText && <div className="pdf-note-body whitespace-pre-wrap">{note.noteText}</div>}
+              {note.noteText && <div className="pdf-note-body">{renderStudyNoteText(note.noteText)}</div>}
               {note.aiExplanation && <section className="pdf-note-ai"><strong>AI explanation</strong><p className="ai-text whitespace-pre-wrap">{stripAiFormatting(note.aiExplanation)}</p></section>}
               {!note.noteText && !note.aiExplanation && <p className="text-xs opacity-70">No note text has been added yet.</p>}
               <div className="pdf-note-meta">Page {note.pageNumber}<br />Created {new Date(note.createdAt).toLocaleString()}<br />Updated {new Date(note.updatedAt).toLocaleString()}</div>
