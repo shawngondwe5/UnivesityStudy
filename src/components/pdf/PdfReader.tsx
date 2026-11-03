@@ -200,12 +200,12 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const openNotePopup = (noteId: string) => {
     let saved = { x: Math.max(12, window.innerWidth - 410), y: 112 };
     try { const raw = window.localStorage.getItem(`pdf-note-popup:${pdfDoc.id}`); if (raw) saved = { ...saved, ...JSON.parse(raw) }; } catch { /* Ignore invalid saved positions. */ }
-    setActiveNotePopup({ noteId, x: saved.x, y: saved.y, pinned: false });
+    setActiveNotePopup({ noteId, x: Math.max(12, Math.min(window.innerWidth - Math.min(390, window.innerWidth - 24) - 12, saved.x)), y: Math.max(12, Math.min(window.innerHeight - Math.min(620, window.innerHeight - 24) - 12, saved.y)), pinned: false });
     setNoteEditDraft(notes.find(item => item.id === noteId)?.noteText || '');
   };
   useEffect(() => {
     if (!activeNotePopup) return;
-    const move = (event: PointerEvent) => { const drag = popupDragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; const width = Math.min(390, window.innerWidth - 24); const x = Math.max(12, Math.min(window.innerWidth - width - 12, event.clientX - drag.offsetX)); const y = Math.max(12, Math.min(window.innerHeight - 270, event.clientY - drag.offsetY)); setActiveNotePopup(current => current ? { ...current, x, y } : current); window.localStorage.setItem(`pdf-note-popup:${pdfDoc.id}`, JSON.stringify({ x, y })); };
+    const move = (event: PointerEvent) => { const drag = popupDragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; const width = Math.min(390, window.innerWidth - 24); const x = Math.max(12, Math.min(window.innerWidth - width - 12, event.clientX - drag.offsetX)); const popupHeight = Math.min(620, window.innerHeight - 24); const y = Math.max(12, Math.min(window.innerHeight - popupHeight - 12, event.clientY - drag.offsetY)); setActiveNotePopup(current => current ? { ...current, x, y } : current); window.localStorage.setItem(`pdf-note-popup:${pdfDoc.id}`, JSON.stringify({ x, y })); };
     const up = () => { popupDragRef.current = null; };
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') setActiveNotePopup(null); };
     const outside = (event: PointerEvent) => { if (!activeNotePopup.pinned && event.target instanceof Element && !event.target.closest('.pdf-note-popup')) setActiveNotePopup(null); };
@@ -837,7 +837,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
               className="pdf-reader-primary flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold text-white transition cursor-pointer"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              <span className="hidden sm:inline">Resume</span>
+              <span>Resume</span>
             </button>
           ) : (
             <button
@@ -919,7 +919,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             </button>
           </div>
 
-          <div className="relative"><button type="button" onClick={() => setShowMoreTools(open => !open)} className="pdf-reader-control rounded-lg border p-1.5 text-slate-600 hover:bg-sky-50" aria-label="More PDF tools" aria-expanded={showMoreTools} title="More tools"><MoreHorizontal className="h-4 w-4" /></button>{showMoreTools && <div className="pdf-more-tools" role="menu"><button role="menuitem" type="button" onClick={rotatePdf}><RotateCw />Rotate clockwise</button><button role="menuitem" type="button" onClick={downloadPdf}><Download />Download PDF</button><button role="menuitem" type="button" onClick={printPdf}><Printer />Print PDF</button><button role="menuitem" type="button" onClick={handleToggleReadingMode}><BookOpen />{readingMode === 'single' ? 'Continuous scroll' : 'Single page'}</button></div>}</div>
+          <div className="relative"><button type="button" onClick={() => setShowMoreTools(open => !open)} className="pdf-reader-control rounded-lg border p-1.5 text-slate-600 hover:bg-sky-50" aria-label="More PDF tools" aria-expanded={showMoreTools} title="More tools"><MoreHorizontal className="h-4 w-4" /></button>{showMoreTools && <div className="pdf-more-tools" role="menu"><button role="menuitem" type="button" onClick={rotatePdf} aria-label="Rotate PDF clockwise" title="Rotate PDF clockwise"><RotateCw />Rotate clockwise</button><button role="menuitem" type="button" onClick={downloadPdf} aria-label="Download PDF" title="Download PDF"><Download />Download PDF</button><button role="menuitem" type="button" onClick={printPdf} aria-label="Open PDF for printing" title="Print PDF"><Printer />Print PDF</button><button role="menuitem" type="button" onClick={handleToggleReadingMode} aria-label={readingMode === 'single' ? 'Switch to continuous scrolling' : 'Switch to single page'} title="Change reading mode"><BookOpen />{readingMode === 'single' ? 'Continuous scroll' : 'Single page'}</button></div>}</div>
         </div>
       </header>
 
