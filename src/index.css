@@ -596,7 +596,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
   cursor: text;
 }
 .pdfjs-viewer-container .pdfViewer .textLayer ::selection {
-  background: rgba(8, 127, 189, .30);
+  background: rgba(255, 145, 0, .72);
+  color: rgba(25, 25, 25, .98);
 }
 .pdfjs-viewer-container .pdfViewer .canvasWrapper {
   overflow: hidden;
@@ -622,4 +623,48 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
 @media (max-width: 720px) {
   .pdfjs-viewer-container .pdfViewer { padding: 14px 8px 108px; }
   .pdf-find-bar { top: 116px; right: 10px; width: calc(100vw - 20px); }
+}
+
+
+/* Compact PDF toolbar: keep the session controls visible without crowding the reader. */
+.pdf-reader-header { min-height: 54px; gap: 8px; flex-wrap: wrap; }
+.pdf-reader-header > div { min-width: 0; }
+.pdf-reader-toolbar { gap: 7px !important; padding: 4px 7px !important; border-radius: 12px !important; }
+.pdf-reader-toolbar button { min-height: 30px; padding: 5px 8px !important; font-size: 11px !important; }
+.pdf-reader-control { min-height: 30px; padding: 5px 7px !important; border-radius: 9px !important; font-size: 11px !important; }
+.pdf-reader-control svg, .pdf-reader-button svg { width: 15px; height: 15px; }
+.pdf-reader-header select { font-size: 11px !important; }
+.pdf-reader-header > div:first-child > div { min-width: 0; }
+.pdf-more-tools { position: absolute; z-index: 90; top: calc(100% + 7px); right: 0; display: grid; min-width: 180px; padding: 6px; border: 1px solid #dce7ed; border-radius: 12px; background: rgba(255,255,255,.97); box-shadow: 0 12px 32px rgba(20,45,60,.18); backdrop-filter: blur(16px); }
+.pdf-more-tools button { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 8px; color: #405968; text-align: left; font-size: 11px; }
+.pdf-more-tools button:hover { background: #eff8fc; color: #087fbd; }
+.pdf-more-tools svg { width: 15px; height: 15px; }
+.ai-text { font-weight: 700 !important; }
+
+/* Highlight overlay only captures input on the coloured text rectangles. */
+.pdfjs-viewer-container .pdfViewer .page { position: relative; }
+.pdf-note-highlight-layer { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.pdf-note-highlight { position: absolute; display: block; padding: 0; margin: 0; border: 0; border-radius: 2px; opacity: .9; mix-blend-mode: multiply; cursor: pointer; pointer-events: auto; }
+.pdf-note-highlight:hover { outline: 2px solid rgba(15, 85, 120, .7); outline-offset: 1px; opacity: 1; }
+.pdf-note-popup { position: fixed; z-index: 100; width: min(390px, calc(100vw - 24px)); max-height: min(620px, calc(100dvh - 24px)); overflow: hidden; border: 1px solid rgba(255,255,255,.72); border-radius: 18px; background: rgba(255,255,255,.78); color: #233b49; box-shadow: 0 20px 60px rgba(12,38,52,.24); backdrop-filter: blur(22px) saturate(1.25); -webkit-backdrop-filter: blur(22px) saturate(1.25); }
+.pdf-note-popup-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border-bottom: 1px solid rgba(160,180,190,.32); background: rgba(255,255,255,.42); cursor: grab; touch-action: none; user-select: none; }
+.pdf-note-popup-header:active { cursor: grabbing; }
+.pdf-note-popup-header > div:first-child { display: grid; gap: 2px; }
+.pdf-note-popup-header strong { font-size: 12px; }
+.pdf-note-popup-header span { color: #71838d; font-size: 10px; }
+.pdf-note-popup-header button, .pdf-note-popup-content button:not(.pdf-note-save) { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; padding: 5px; border-radius: 8px; color: #637985; }
+.pdf-note-popup-header button:hover, .pdf-note-popup-content button:hover { background: rgba(224,239,246,.75); }
+.pdf-note-popup-header svg, .pdf-note-popup-content button svg { width: 14px; height: 14px; }
+.pdf-note-popup-content { max-height: calc(min(620px, 100dvh - 24px) - 48px); overflow: auto; padding: 12px; }
+.pdf-note-selected { margin-bottom: 11px; padding: 8px 10px; border-left: 3px solid #e99b27; border-radius: 0 8px 8px 0; background: rgba(255,247,225,.72); color: #64747d; font-size: 11px; line-height: 1.5; }
+.pdf-note-edit { display: block; width: 100%; min-height: 94px; resize: vertical; padding: 9px; border: 1px solid rgba(160,180,190,.55); border-radius: 10px; outline: none; background: rgba(255,255,255,.72); color: #263e4c; font-size: 12px; line-height: 1.5; }
+.pdf-note-edit:focus { border-color: #71b9d5; box-shadow: 0 0 0 3px rgba(8,127,189,.1); }
+.pdf-note-save { padding: 6px 12px; border-radius: 8px; background: #087fbd; color: #fff; font-size: 11px; font-weight: 700; }
+@media (max-width: 720px) {
+  .pdf-reader-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px !important; gap: 5px; }
+  .pdf-reader-header > div:first-child { flex: 1 1 44%; }
+  .pdf-reader-toolbar { flex: 0 0 auto; gap: 4px !important; }
+  .pdf-reader-toolbar select { max-width: 82px; }
+  .pdf-reader-header > div:last-child { flex: 1 1 100%; justify-content: flex-end; }
+  .pdf-note-popup { max-height: min(72dvh, 620px); }
 }

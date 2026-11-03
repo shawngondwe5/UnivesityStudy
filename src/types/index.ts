@@ -64,12 +64,19 @@ export interface AppSettings {
 }
 
  
+export interface StudyNoteHighlight {
+  color: 'yellow' | 'green' | 'pink' | 'blue' | 'orange';
+  rects: { x: number; y: number; w: number; h: number }[];
+}
+
 export interface StudyNote {
   id: string;
   pdfId: string;
   pageNumber: number;
   selectedText: string;
   noteText: string;
+  aiExplanation?: string;
+  highlight?: StudyNoteHighlight;
   createdAt: number;
   updatedAt: number;
 }

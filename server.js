@@ -36,9 +36,13 @@ app.post('/api/ai/summarize', async (req, res) => {
   if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'AI summaries are not configured. Add GEMINI_API_KEY to the server secrets.' });
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const mode = req.body?.mode === 'explain' ? 'explain' : 'summarize';
+    const instruction = mode === 'explain'
+      ? 'Explain the selected passage in very simple English for a university student. Define difficult terms, explain the main idea and preserve the original meaning. Do not add facts that are not in the passage. Keep it clear and concise.'
+      : 'Summarize the selected passage in simple English. Keep the summary short, explain important terms, preserve the original meaning, and do not add facts that are not in the passage. Use 3-5 concise bullet points where appropriate.';
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `You are a clear, careful university study assistant. Summarize the selected passage from a student's PDF in simple English. Keep the summary short, explain important terms, preserve the original meaning, and do not add facts that are not in the passage. Use 3-5 concise bullet points where appropriate.\n\nDocument: ${documentName}\nPage: ${pageNumber ?? 'unknown'}\n\nSelected passage:\n${selectedText}`
+      contents: `You are a clear, careful university study assistant. ${instruction}\n\nDocument: ${documentName}\nPage: ${pageNumber ?? 'unknown'}\n\nSelected passage:\n${selectedText}`
     });
     const summary = response.text?.trim();
     if (!summary) return res.status(502).json({ error: 'The AI returned an empty summary. Please try again.' });
