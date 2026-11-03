@@ -166,19 +166,19 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
             {courseProgress}%
           </div>
         </div>
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="course-overview-stat p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="text-xs text-slate-500 font-medium">Lectures &amp; PDFs</div>
           <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">
             {activeLectures.length} / {activePdfs.length}
           </div>
         </div>
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="course-overview-stat p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="text-xs text-slate-500 font-medium">Pages Studied</div>
           <div className="text-xl font-bold text-slate-900 dark:text-white mt-1 font-mono">
             {totalStudiedPages} / {totalPagesInCourse}
           </div>
         </div>
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="course-overview-stat p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="text-xs text-slate-500 font-medium">Total Study Time</div>
           <div className="text-xl font-bold text-slate-900 dark:text-white mt-1 font-mono">
             {formatDuration(totalCourseTime)}
