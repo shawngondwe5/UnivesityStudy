@@ -83,19 +83,19 @@ export const App: React.FC = () => {
 
   // Reactive IndexedDB queries via Dexie hooks
   const liveCourses = useLiveQuery(
-    () => databaseReady ? db.courses.toArray() : Promise.resolve([]),
+    () => databaseReady ? db.courses.toArray() : Promise.resolve(undefined),
     [databaseReady]
   );
   const liveLectures = useLiveQuery(
-    () => databaseReady ? db.lectures.toArray() : Promise.resolve([]),
+    () => databaseReady ? db.lectures.toArray() : Promise.resolve(undefined),
     [databaseReady]
   );
   const livePdfs = useLiveQuery(
-    () => databaseReady ? db.pdfs.toArray() : Promise.resolve([]),
+    () => databaseReady ? db.pdfs.toArray() : Promise.resolve(undefined),
     [databaseReady]
   );
   const liveSessions = useLiveQuery(
-    () => databaseReady ? db.sessions.toArray() : Promise.resolve([]),
+    () => databaseReady ? db.sessions.toArray() : Promise.resolve(undefined),
     [databaseReady]
   );
   const courses = liveCourses ?? [];
