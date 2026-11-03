@@ -27,7 +27,6 @@ import {
   Printer,
   Bookmark,
   BookOpen,
-  ChevronDown
 } from 'lucide-react';
 // Use PDF.js's own viewer engine for virtualized page rendering, text layers,
 // selection, find highlighting, link navigation, and page/zoom management.
@@ -133,6 +132,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(pdfDoc.lastPositionPage || 1);
   const [totalPages, setTotalPages] = useState<number>(pdfDoc.totalPages || 1);
   const [scale, setScale] = useState<number>(1.2);
+  const [zoomMode, setZoomMode] = useState('page-width');
   const [readingMode, setReadingMode] = useState<'single' | 'continuous'>(settings.defaultReadingMode || 'single');
   const [isPagePanelOpen, setIsPagePanelOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<'pages' | 'outline'>('pages');
@@ -392,6 +392,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     };
     const onScaleChanging = (event: any) => {
       if (Number.isFinite(event.scale)) setScale(event.scale);
+      setZoomMode(event.presetValue ? String(event.presetValue) : 'custom');
     };
     const onFindMatches = (event: any) => {
       const count = event.matchesCount || {};
@@ -557,14 +558,20 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     // Opening the original PDF lets the browser's native PDF print pipeline
     // handle page sizing, vector output, and large documents.
     const url = URL.createObjectURL(pdfDoc.blob);
-    const printWindow = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!printWindow) URL.revokeObjectURL(url);
+    const printWindow = window.open(url, '_blank');
+    if (printWindow) {
+      printWindow.opener = null;
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } else {
+      URL.revokeObjectURL(url);
+    }
   };
 
   const setViewerZoom = (value: string) => {
     const viewer = pdfViewerRef.current;
     if (!viewer) return;
     viewer.currentScaleValue = value;
+    setZoomMode(value);
   };
 
   const rotatePdf = () => {
@@ -818,7 +825,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
           </button>
           <select
             aria-label="PDF zoom level"
-            value={scale >= 2.49 ? 'custom' : (['page-width', 'page-fit', 'auto', '1', '1.25', '1.5', '2'].includes(String(scale)) ? String(scale) : 'custom')}
+            value={zoomMode}
             onChange={event => setViewerZoom(event.target.value)}
             className="pdf-reader-control rounded-xl border px-2 py-2 text-xs text-slate-600 outline-none"
           >
@@ -1015,7 +1022,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             value={searchQuery}
             onChange={event => handleSearch(event.target.value)}
             onKeyDown={event => {
-              if (event.key === 'Enter') { event.preventDefault(); handleSearch(searchQuery, event.shiftKey); }
+              if (event.key === 'Enter') { event.preventDefault(); handleSearch(searchQuery, true, event.shiftKey); }
               if (event.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); pdfFindControllerRef.current?.executeCommand('find', { query: '' }); }
             }}
             placeholder="Find in document"
