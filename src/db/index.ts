@@ -1,7 +1,5 @@
 import Dexie, { type Table } from 'dexie';
 import type { Course, Lecture, PDFDocument, StudySession, AppSettings } from '../types';
-import { createSamplePdfBlob } from '../utils/samplePdf';
-import { getDateKey } from '../utils/calculations';
 
 export class StudyTrackerDB extends Dexie {
   courses!: Table<Course, string>;
@@ -18,6 +16,19 @@ export class StudyTrackerDB extends Dexie {
       pdfs: 'id, lectureId, courseId, order, isDeleted, lastReadAt',
       sessions: 'id, pdfId, courseId, sessionType, startedAt, dateKey, isUnfinished',
       settings: 'id'
+    });
+    this.version(2).stores({
+      courses: 'id, name, createdAt, isDeleted',
+      lectures: 'id, courseId, order, isDeleted',
+      pdfs: 'id, lectureId, courseId, order, isDeleted, lastReadAt',
+      sessions: 'id, pdfId, courseId, sessionType, startedAt, dateKey, isUnfinished',
+      settings: 'id'
+    }).upgrade(async tx => {
+      // Remove only the known built-in demo records from existing installations.
+      await tx.sessions.delete('session-seed-1');
+      await tx.pdfs.bulkDelete(['pdf-wm-arch', 'pdf-sem-enc']);
+      await tx.lectures.bulkDelete(['lec-working-mem', 'lec-semantic-enc']);
+      await tx.courses.delete('course-cog-psy-101');
     });
   }
 }
@@ -45,92 +56,7 @@ export async function initializeDatabase(): Promise<AppSettings> {
       await db.settings.put(settings);
     }
 
-    // Check if course already exists before seeding
-    const courseId = 'course-cog-psy-101';
-    const existingCourse = await db.courses.get(courseId);
-    if (!existingCourse) {
-      await db.courses.put({
-        id: courseId,
-        name: 'Cognitive Psychology & Human Memory',
-        description: 'Foundational models of working memory, neural encoding, semantic networks, and empirical recall.',
-        createdAt: Date.now() - 86400000 * 2
-      });
-
-      const lectureId1 = 'lec-working-mem';
-      await db.lectures.put({
-        id: lectureId1,
-        courseId,
-        name: 'Lecture 1: Working Memory Architecture',
-        order: 1,
-        createdAt: Date.now() - 86400000 * 2
-      });
-
-      const lectureId2 = 'lec-semantic-enc';
-      await db.lectures.put({
-        id: lectureId2,
-        courseId,
-        name: 'Lecture 2: Semantic Encoding & Retrieval',
-        order: 2,
-        createdAt: Date.now() - 86400000
-      });
-
-      const pdf1Blob = createSamplePdfBlob('Working Memory Architecture', 'Cognitive Psychology', 8);
-      const pdf1Id = 'pdf-wm-arch';
-      await db.pdfs.put({
-        id: pdf1Id,
-        lectureId: lectureId1,
-        courseId,
-        filename: 'Working_Memory_Architecture_L1.pdf',
-        blob: pdf1Blob,
-        totalPages: 8,
-        studiedPages: [1, 2, 3],
-        lastPositionPage: 3,
-        order: 1,
-        uploadedAt: Date.now() - 86400000 * 2,
-        totalFirstTimeTime: 2400,
-        totalRevisionTime: 600
-      });
-
-      const pdf2Blob = createSamplePdfBlob('Semantic Encoding and Recall', 'Cognitive Psychology', 10);
-      const pdf2Id = 'pdf-sem-enc';
-      await db.pdfs.put({
-        id: pdf2Id,
-        lectureId: lectureId2,
-        courseId,
-        filename: 'Semantic_Encoding_L2.pdf',
-        blob: pdf2Blob,
-        totalPages: 10,
-        studiedPages: [],
-        lastPositionPage: 1,
-        order: 1,
-        uploadedAt: Date.now() - 86400000,
-        totalFirstTimeTime: 0,
-        totalRevisionTime: 0
-      });
-
-      // Seed yesterday's completed session to demonstrate streak and weekly report
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayKey = getDateKey(yesterday);
-
-      await db.sessions.put({
-        id: 'session-seed-1',
-        pdfId: pdf1Id,
-        pdfName: 'Working_Memory_Architecture_L1.pdf',
-        courseId,
-        courseName: 'Cognitive Psychology & Human Memory',
-        lectureId: lectureId1,
-        lectureName: 'Lecture 1: Working Memory Architecture',
-        sessionType: 'first-time',
-        startedAt: yesterday.getTime() - 2400000,
-        endedAt: yesterday.getTime(),
-        durationSeconds: 2400,
-        visitedPages: [1, 2, 3],
-        confirmedPages: [1, 2, 3],
-        isUnfinished: false,
-        dateKey: yesterdayKey
-      });
-    }
+    // New installations start with an empty workspace; demo PDFs can be added manually.
 
     return settings;
   })();
