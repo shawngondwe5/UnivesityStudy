@@ -108,6 +108,12 @@ export async function initializeDatabase(): Promise<AppSettings> {
       await db.settings.put(settings);
     }
 
+    if ((settings.sampleDataCleanupVersion ?? 0) < 1) {
+      await removeGeneratedSampleData();
+      settings = { ...settings, sampleDataCleanupVersion: 1 };
+      await db.settings.put(settings);
+    }
+
     return settings;
   })().catch(error => {
     initPromise = null;
