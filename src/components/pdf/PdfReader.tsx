@@ -278,7 +278,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       if (!response.ok) throw new Error(data.error || 'The summary could not be generated.');
       const explanation = stripAiFormatting(typeof data.summary === 'string' ? data.summary : ''); setSummary(explanation);
       const now = Date.now(); const note: StudyNote = { id: crypto.randomUUID(), pdfId: pdfDoc.id, pageNumber: selectedText.pageNumber, selectedText: selectedText.text, noteText: '', aiExplanation: explanation, highlight: { color: noteColor, rects: selectedText.rects }, createdAt: now, updatedAt: now };
-      await db.notes.add(note); setActiveNotePopup({ noteId: note.id, x: Math.max(12, window.innerWidth - 410), y: 112, pinned: false });
+      await db.notes.add(note); setActiveNotePopup({ noteId: note.id, x: Math.max(12, window.innerWidth - 410), y: 112, pinned: false }); setSelectionPanel(null); setSelectedText(null); window.getSelection()?.removeAllRanges();
     } catch (error) {
       setSummaryError(error instanceof Error ? error.message : 'The summary could not be generated.');
     } finally {
@@ -1097,7 +1097,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             <div className="flex items-center justify-between gap-2"><label className="text-[10px] text-slate-500">Highlight <select value={noteColor} onChange={event => setNoteColor(event.target.value as typeof noteColor)} className="ml-1 rounded border border-slate-200 bg-white p-1 text-[10px]"><option value="yellow">Yellow</option><option value="green">Green</option><option value="pink">Pink</option><option value="blue">Blue</option><option value="orange">Orange</option></select></label><button type="button" onClick={handleSaveSelectedNote} disabled={!noteDraft.trim()} className="pdf-selection-save"><Save className="h-3.5 w-3.5" /> Save note</button></div>
           </div>}
           {selectionPanel === 'summary' && <div className="w-80 max-w-[calc(100vw-48px)] space-y-2">
-            <div className="flex items-center justify-between gap-2"><strong className="text-xs flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> AI summary</strong><button type="button" onClick={() => setSelectionPanel('actions')} aria-label="Back to selection actions"><X className="h-4 w-4" /></button></div>
+            <div className="flex items-center justify-between gap-2"><strong className="text-xs flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> AI explanation</strong><button type="button" onClick={() => setSelectionPanel('actions')} aria-label="Back to selection actions"><X className="h-4 w-4" /></button></div>
             {isSummarizing ? <p className="text-xs text-slate-500">Reading the selected passage…</p> : summaryError ? <p className="text-xs text-rose-600">{summaryError}</p> : <p className="ai-text whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{stripAiFormatting(summary)}</p>}
             {!isSummarizing && !summaryError && summary && <button type="button" onClick={() => { setSelectionPanel(null); setSelectedText(null); window.getSelection()?.removeAllRanges(); }} className="pdf-selection-save">Done</button>}
             {summaryError && <button type="button" onClick={handleSummarizeSelection} className="pdf-selection-save">Try again</button>}
