@@ -388,7 +388,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         const page = await pdfProxy.getPage(num);
         const viewport = page.getViewport({ scale });
         const wrapper = document.createElement('div');
-        wrapper.className = 'pdf-page-surface mb-6 flex flex-col items-center shadow-md';
+        wrapper.className = 'pdf-page-surface mb-6 shadow-md';
         wrapper.id = `continuous-page-${num}`;
         wrapper.setAttribute('data-page-number', String(num));
         wrapper.style.width = viewport.width + 'px';
