@@ -67,7 +67,7 @@ export const App: React.FC = () => {
   const selectedCourse = courses.find(c => c.id === activeCourseId);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
+    <div className="study-app-shell flex h-screen w-screen overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans">
       {/* Vertical Left Navigation */}
       <Sidebar
         currentTab={currentTab}
@@ -80,7 +80,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area: Large rounded white application container */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto p-4 sm:p-6 lg:p-8">
+      <main className="study-main flex-1 flex flex-col min-w-0 overflow-y-auto p-4 sm:p-6 lg:p-8">
         <div className="w-full max-w-7xl mx-auto flex-1">
           {currentTab === 'dashboard' && (
             <Dashboard
