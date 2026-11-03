@@ -20,33 +20,25 @@ import {
   Sparkles,
   X,
   Save,
-  Trash2
+  Trash2,
+  Search,
+  RotateCw,
+  Download,
+  Printer,
+  Bookmark,
+  BookOpen,
+  ChevronDown
 } from 'lucide-react';
+// Use PDF.js's own viewer engine for virtualized page rendering, text layers,
+// selection, find highlighting, link navigation, and page/zoom management.
+// @ts-ignore - pdfjs-dist 3.x ships the viewer bundle without complete TS declarations.
+import { EventBus, PDFViewer, PDFLinkService, PDFFindController, ScrollMode } from 'pdfjs-dist/web/pdf_viewer';
 import type { PDFDocument, StudySession, SessionType, AppSettings, StudyNote } from '../../types';
 import { db } from '../../db';
 import { formatTimer, getDateKey } from '../../utils/calculations';
 import { useInactivity } from '../../hooks/useInactivity';
 import { FinishReviewModal } from './FinishReviewModal';
 import { ResumePositionModal } from './ResumePositionModal';
-
-// Build the selectable text layer separately from the page bitmap.
-// Returning the task before awaiting it lets page navigation/virtualization cancel stale work.
-async function renderPdfTextLayer(
-  page: pdfjsLib.PDFPageProxy,
-  viewport: any,
-  container: HTMLDivElement,
-  isCancelled: () => boolean = () => false
-) {
-  container.replaceChildren();
-  container.style.setProperty('--scale-factor', String(viewport.scale));
-  container.style.position = 'absolute';
-  container.style.inset = '0 auto auto 0';
-  container.style.zIndex = '2';
-  const textContent = await page.getTextContent();
-  if (isCancelled()) return null;
-  const render = (pdfjsLib as any).renderTextLayer as (options: { textContent: unknown; container: HTMLDivElement; viewport: any; textDivs: HTMLElement[] }) => { promise: Promise<void>; cancel: () => void };
-  return render({ textContent, container, viewport, textDivs: [] });
-}
 
 // Set offline local worker bundle, with fallback
 try {
@@ -143,6 +135,13 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const [scale, setScale] = useState<number>(1.2);
   const [readingMode, setReadingMode] = useState<'single' | 'continuous'>(settings.defaultReadingMode || 'single');
   const [isPagePanelOpen, setIsPagePanelOpen] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState<'pages' | 'outline'>('pages');
+  const [outline, setOutline] = useState<any[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchMatches, setSearchMatches] = useState({ current: 0, total: 0 });
+  const [pageInput, setPageInput] = useState(String(pdfDoc.lastPositionPage || 1));
+  const [rotation, setRotation] = useState(0);
 
   // Document progress state (in-memory sync with IndexedDB)
   const [studiedPages, setStudiedPages] = useState<number[]>(pdfDoc.studiedPages || []);
@@ -174,10 +173,13 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   }, [pdfDoc.id]) || [];
 
   const readerRootRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const textLayerRef = useRef<HTMLDivElement | null>(null);
-  const mainScrollContainerRef = useRef<HTMLElement | null>(null);
-  const continuousContainerRef = useRef<HTMLDivElement | null>(null);
+  const mainScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const pdfViewerElementRef = useRef<HTMLDivElement | null>(null);
+  const pdfViewerRef = useRef<any>(null);
+  const pdfLinkServiceRef = useRef<any>(null);
+  const pdfFindControllerRef = useRef<any>(null);
+  const pdfEventBusRef = useRef<any>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeThumbnailRef = useRef<HTMLButtonElement | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
 
@@ -350,251 +352,110 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     handlePageChange(currentPage);
   }, [currentPage, handlePageChange]);
 
-  // Render the active page at device-pixel resolution for crisp text and graphics.
+  // Delegate page layout, visible-page virtualization, progressive rendering,
+  // text selection, find highlighting, links, and page caching to PDF.js's
+  // maintained viewer implementation (the same viewer layer used by Firefox).
   useEffect(() => {
-    if (!pdfProxy || readingMode !== 'single' || !canvasRef.current) return;
+    const container = mainScrollContainerRef.current;
+    const viewerElement = pdfViewerElementRef.current;
+    if (!pdfProxy || !container || !viewerElement) return;
 
-    let cancelled = false;
-    let renderTask: pdfjsLib.RenderTask | null = null;
-    let textRenderTask: { cancel: () => void; promise: Promise<void> } | null = null;
+    const eventBus = new EventBus();
+    const linkService = new PDFLinkService({ eventBus });
+    const findController = new PDFFindController({ eventBus, linkService });
+    const viewer = new PDFViewer({
+      container,
+      viewer: viewerElement,
+      eventBus,
+      linkService,
+      findController,
+      textLayerMode: 1,
+      removePageBorders: true,
+      maxCanvasPixels: 16777216
+    });
 
-    const renderPage = async () => {
-      try {
-        const page = await pdfProxy.getPage(currentPage);
-        if (cancelled) return;
-        const viewport = page.getViewport({ scale });
-        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const context = canvas.getContext('2d');
-        if (!context) return;
+    pdfViewerRef.current = viewer;
+    pdfLinkServiceRef.current = linkService;
+    pdfFindControllerRef.current = findController;
+    pdfEventBusRef.current = eventBus;
 
-        canvas.width = Math.ceil(viewport.width * outputScale);
-        canvas.height = Math.ceil(viewport.height * outputScale);
-        canvas.style.width = viewport.width + 'px';
-        canvas.style.height = viewport.height + 'px';
-        const textLayer = textLayerRef.current;
-        if (textLayer) {
-          textLayer.style.width = viewport.width + 'px';
-          textLayer.style.height = viewport.height + 'px';
-        }
-
-        renderTask = page.render({
-          canvasContext: context,
-          viewport,
-          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0]
-        });
-        await renderTask.promise;
-        if (cancelled || !textLayer) return;
-        textRenderTask = await renderPdfTextLayer(page, viewport, textLayer, () => cancelled);
-        await textRenderTask?.promise;
-      } catch (err: any) {
-        if (!cancelled && err.name !== 'RenderingCancelledException') {
-          console.error('Page render error:', err);
-        }
+    const onPageChanging = (event: any) => {
+      const page = Number(event.pageNumber);
+      if (!Number.isFinite(page) || page < 1) return;
+      setCurrentPage(page);
+      setPageInput(String(page));
+      handlePageChange(page);
+      if (!isTimerRunning) {
+        setIsTimerRunning(true);
+        setShowInactivityNotice(false);
       }
     };
-
-    renderPage();
-    return () => {
-      cancelled = true;
-      renderTask?.cancel();
-      textRenderTask?.cancel();
+    const onScaleChanging = (event: any) => {
+      if (Number.isFinite(event.scale)) setScale(event.scale);
     };
-  }, [pdfProxy, currentPage, scale, readingMode]);
+    const onFindMatches = (event: any) => {
+      const count = event.matchesCount || {};
+      setSearchMatches({ current: count.current || 0, total: count.total || 0 });
+    };
 
-  // Chrome's PDFium viewer calculates the visible-page set on scroll, paints only
-  // those pages, cancels obsolete paints and unloads pages outside the viewport.
-  // Mirror that strategy here: keep lightweight page placeholders, rasterize only
-  // pages near the viewport, and release their canvases/text spans when far away.
+    eventBus.on('pagechanging', onPageChanging);
+    eventBus.on('scalechanging', onScaleChanging);
+    eventBus.on('updatefindmatchescount', onFindMatches);
+
+    viewer.setDocument(pdfProxy);
+    linkService.setDocument(pdfProxy, null);
+
+    const initializeView = () => {
+      viewer.currentScaleValue = 'page-width';
+      viewer.currentPageNumber = Math.min(Math.max(1, currentPage), pdfProxy.numPages);
+      viewer.scrollMode = readingMode === 'single' ? ScrollMode.PAGE : ScrollMode.VERTICAL;
+    };
+    eventBus.on('pagesinit', initializeView);
+
+    pdfProxy.getOutline().then(items => {
+      setOutline(items || []);
+    }).catch(error => console.warn('Could not read PDF bookmarks:', error));
+
+    return () => {
+      eventBus.off('pagechanging', onPageChanging);
+      eventBus.off('scalechanging', onScaleChanging);
+      eventBus.off('updatefindmatchescount', onFindMatches);
+      eventBus.off('pagesinit', initializeView);
+      viewer.setDocument(null);
+      linkService.setDocument(null, null);
+      viewer.cleanup();
+      pdfViewerRef.current = null;
+      pdfLinkServiceRef.current = null;
+      pdfFindControllerRef.current = null;
+      pdfEventBusRef.current = null;
+    };
+  // Viewer is created once for each loaded PDF. Page/mode updates are handled below.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfProxy, handlePageChange]);
+
+  // Keep the built-in PDF.js viewer's scroll mode in sync with the study preference.
   useEffect(() => {
-    if (!pdfProxy || readingMode !== 'continuous' || !continuousContainerRef.current) return;
+    const viewer = pdfViewerRef.current;
+    if (!viewer || !pdfProxy) return;
+    viewer.scrollMode = readingMode === 'single' ? ScrollMode.PAGE : ScrollMode.VERTICAL;
+    viewer.currentPageNumber = currentPage;
+  }, [readingMode, pdfProxy]);
 
-    let disposed = false;
-    const container = continuousContainerRef.current;
-    const scrollRoot = mainScrollContainerRef.current;
-    container.replaceChildren();
+  // PDF.js emits pagechanging only when the active page changes; this avoids
+  // scanning every page element on every scroll event.
 
-    type VirtualPage = {
-      page: pdfjsLib.PDFPageProxy;
-      viewport: any;
-      canvas: HTMLCanvasElement;
-      textLayer: HTMLDivElement;
-      renderTask: pdfjsLib.RenderTask | null;
-      textTask: { cancel: () => void; promise: Promise<void> } | null;
-      generation: number;
-      visible: boolean;
-      rendered: boolean;
-      rendering: boolean;
-    };
-    const states = new Map<number, VirtualPage>();
-
-    const renderPage = async (state: VirtualPage) => {
-      if (disposed || state.rendering || state.rendered) return;
-      state.rendering = true;
-      const generation = ++state.generation;
-      try {
-        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
-        state.canvas.width = Math.ceil(state.viewport.width * outputScale);
-        state.canvas.height = Math.ceil(state.viewport.height * outputScale);
-        state.canvas.style.width = state.viewport.width + 'px';
-        state.canvas.style.height = state.viewport.height + 'px';
-        const context = state.canvas.getContext('2d');
-        if (!context) return;
-        state.renderTask = state.page.render({
-          canvasContext: context,
-          viewport: state.viewport,
-          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0]
-        });
-        await state.renderTask.promise;
-        if (disposed || generation !== state.generation || !state.visible) return;
-        state.textTask = await renderPdfTextLayer(
-          state.page,
-          state.viewport,
-          state.textLayer,
-          () => disposed || generation !== state.generation || !state.visible
-        );
-        await state.textTask?.promise;
-        if (!disposed && generation === state.generation) state.rendered = true;
-      } catch (error: any) {
-        if (!disposed && error.name !== 'RenderingCancelledException') {
-          console.error('Continuous PDF page render failed:', error);
-        }
-      } finally {
-        if (generation === state.generation) state.rendering = false;
-      }
-    };
-
-    const observer = new IntersectionObserver(entries => {
-      entries.forEach(entry => {
-        const pageNumber = Number((entry.target as HTMLElement).dataset.pageNumber);
-        const state = states.get(pageNumber);
-        if (!state) return;
-        state.visible = entry.isIntersecting;
-        if (entry.isIntersecting) {
-          void renderPage(state);
-        } else if (state.rendering || state.rendered) {
-          // Pages outside the prefetch window no longer consume canvas memory.
-          state.generation++;
-          state.renderTask?.cancel();
-          state.textTask?.cancel();
-          state.renderTask = null;
-          state.textTask = null;
-          state.rendered = false;
-          state.rendering = false;
-          state.canvas.width = 0;
-          state.canvas.height = 0;
-          state.textLayer.replaceChildren();
-        }
-      });
-    }, { root: scrollRoot, rootMargin: '1100px 0px' });
-
-    const buildPlaceholders = async () => {
-      for (let num = 1; num <= pdfProxy.numPages; num++) {
-        if (disposed) return;
-        const page = await pdfProxy.getPage(num);
-        if (disposed) return;
-        const viewport = page.getViewport({ scale });
-        const wrapper = document.createElement('div');
-        wrapper.className = 'pdf-page-surface mb-6 shadow-md';
-        wrapper.id = `continuous-page-${num}`;
-        wrapper.dataset.pageNumber = String(num);
-        wrapper.style.width = viewport.width + 'px';
-        wrapper.style.height = viewport.height + 'px';
-        wrapper.style.contain = 'layout paint style';
-
-        const canvas = document.createElement('canvas');
-        canvas.style.width = viewport.width + 'px';
-        canvas.style.height = viewport.height + 'px';
-        canvas.style.position = 'relative';
-        canvas.style.zIndex = '0';
-
-        const textLayer = document.createElement('div');
-        textLayer.className = 'textLayer pdf-text-layer';
-        textLayer.style.width = viewport.width + 'px';
-        textLayer.style.height = viewport.height + 'px';
-        textLayer.style.setProperty('--scale-factor', String(viewport.scale));
-        textLayer.style.zIndex = '2';
-
-        wrapper.appendChild(canvas);
-        wrapper.appendChild(textLayer);
-        container.appendChild(wrapper);
-        states.set(num, {
-          page, viewport, canvas, textLayer, renderTask: null, textTask: null,
-          generation: 0, visible: false, rendered: false, rendering: false
-        });
-        observer.observe(wrapper);
-      }
-    };
-
-    void buildPlaceholders();
-    return () => {
-      disposed = true;
-      observer.disconnect();
-      states.forEach(state => {
-        state.generation++;
-        state.renderTask?.cancel();
-        state.textTask?.cancel();
-      });
-      states.clear();
-      container.replaceChildren();
-    };
-  }, [pdfProxy, readingMode, scale]);
-
-  // Continuous mode records the page after scrolling settles. This prevents
-  // smooth scrolling and fast flicks from marking every page passed on the way.
-  useEffect(() => {
-    if (readingMode !== 'continuous' || !pdfProxy || !mainScrollContainerRef.current) return;
-
-    const scrollContainer = mainScrollContainerRef.current;
-    let settleTimer: number | null = null;
-
-    const handleScroll = () => {
-      if (settleTimer !== null) window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => {
-        const pageElements = scrollContainer.querySelectorAll<HTMLElement>('[data-page-number]');
-        if (pageElements.length === 0) return;
-
-        const containerRect = scrollContainer.getBoundingClientRect();
-        const viewportMiddle = containerRect.top + containerRect.height / 2;
-        let visiblePage = currentPage;
-        let smallestDistance = Infinity;
-
-        pageElements.forEach(element => {
-          const rect = element.getBoundingClientRect();
-          const distance = viewportMiddle < rect.top
-            ? rect.top - viewportMiddle
-            : viewportMiddle > rect.bottom
-              ? viewportMiddle - rect.bottom
-              : 0;
-          if (distance < smallestDistance) {
-            smallestDistance = distance;
-            visiblePage = Number(element.dataset.pageNumber);
-          }
-        });
-
-        if (visiblePage >= 1 && visiblePage <= totalPages && visiblePage !== currentPage) {
-          setCurrentPage(visiblePage);
-          handlePageChange(visiblePage);
-          if (!isTimerRunning) {
-            setIsTimerRunning(true);
-            setShowInactivityNotice(false);
-          }
-        }
-      }, 160);
-    };
-
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      scrollContainer.removeEventListener('scroll', handleScroll);
-      if (settleTimer !== null) window.clearTimeout(settleTimer);
-    };
-  }, [readingMode, pdfProxy, totalPages, currentPage, isTimerRunning, handlePageChange]);
 
   // Keyboard navigation for page turning
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (showFinishModal || showResumeModal || ['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setSearchOpen(true);
+        window.setTimeout(() => searchInputRef.current?.focus(), 0);
         return;
       }
 
@@ -613,13 +474,11 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
   const navigateToPage = (pageNum: number) => {
     if (pageNum < 1 || pageNum > totalPages) return;
+    const viewer = pdfViewerRef.current;
+    if (viewer) viewer.currentPageNumber = pageNum;
     setCurrentPage(pageNum);
+    setPageInput(String(pageNum));
     handlePageChange(pageNum);
-
-    if (readingMode === 'continuous') {
-      const el = document.getElementById(`continuous-page-${pageNum}`);
-      el?.scrollIntoView({ behavior: 'smooth' });
-    }
 
     if (!isTimerRunning) {
       setIsTimerRunning(true);
@@ -637,6 +496,61 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       });
     }
   }, [currentPage]);
+
+  const handleSearch = (query: string, previous = false) => {
+    setSearchQuery(query);
+    setSearchMatches({ current: 0, total: 0 });
+    if (!query.trim()) return;
+    pdfFindControllerRef.current?.executeCommand(previous ? 'findagain' : 'find', {
+      query,
+      phraseSearch: true,
+      caseSensitive: false,
+      highlightAll: true,
+      findPrevious: previous
+    });
+  };
+
+  const goToOutlineItem = (item: any) => {
+    const linkService = pdfLinkServiceRef.current;
+    if (item.url) {
+      window.open(item.url, '_blank', 'noopener,noreferrer');
+    } else if (item.dest && linkService) {
+      linkService.goToDestination(item.dest);
+    }
+  };
+
+  const downloadPdf = () => {
+    const url = URL.createObjectURL(pdfDoc.blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = pdfDoc.filename || 'document.pdf';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+  };
+
+  const printPdf = () => {
+    // Opening the original PDF lets the browser's native PDF print pipeline
+    // handle page sizing, vector output, and large documents.
+    const url = URL.createObjectURL(pdfDoc.blob);
+    const printWindow = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!printWindow) URL.revokeObjectURL(url);
+  };
+
+  const setViewerZoom = (value: string) => {
+    const viewer = pdfViewerRef.current;
+    if (!viewer) return;
+    viewer.currentScaleValue = value;
+  };
+
+  const rotatePdf = () => {
+    const viewer = pdfViewerRef.current;
+    if (!viewer) return;
+    const nextRotation = (viewer.pagesRotation + 90) % 360;
+    viewer.pagesRotation = nextRotation;
+    setRotation(nextRotation);
+  };
 
   const handleToggleReadingMode = async () => {
     const nextMode: 'single' | 'continuous' = readingMode === 'single' ? 'continuous' : 'single';
@@ -865,6 +779,9 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
           <button type="button" onClick={() => setShowNotes(true)} className="pdf-reader-control flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-sky-50" aria-label={`Open notes, ${notes.length} saved`} title="Saved notes">
             <StickyNote className="h-4 w-4" /><span className="hidden sm:inline">Notes {notes.length > 0 ? `(${notes.length})` : ''}</span>
           </button>
+          <button type="button" onClick={() => { setSearchOpen(open => !open); if (!searchOpen) window.setTimeout(() => searchInputRef.current?.focus(), 0); }} className="pdf-reader-control flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-sky-50" aria-label="Find in document" title="Find in document">
+            <Search className="h-4 w-4" /><span className="hidden sm:inline">Find</span>
+          </button>
           <button
             type="button"
             onClick={() => setIsPagePanelOpen(open => !open)}
@@ -876,6 +793,21 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             {isPagePanelOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
             <span className="hidden sm:inline">{isPagePanelOpen ? 'Hide pages' : 'Show pages'}</span>
           </button>
+          <select
+            aria-label="PDF zoom level"
+            value={scale >= 2.49 ? 'custom' : (['page-width', 'page-fit', 'auto', '1', '1.25', '1.5', '2'].includes(String(scale)) ? String(scale) : 'custom')}
+            onChange={event => setViewerZoom(event.target.value)}
+            className="pdf-reader-control rounded-xl border px-2 py-2 text-xs text-slate-600 outline-none"
+          >
+            <option value="auto">Automatic</option>
+            <option value="page-width">Fit width</option>
+            <option value="page-fit">Fit page</option>
+            <option value="1">100%</option>
+            <option value="1.25">125%</option>
+            <option value="1.5">150%</option>
+            <option value="2">200%</option>
+            <option value="custom" disabled>{Math.round(scale * 100)}%</option>
+          </select>
           <div className="pdf-reader-control flex items-center rounded-xl p-1 border">
             <button
               type="button"
@@ -898,6 +830,15 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             </button>
           </div>
 
+          <button type="button" onClick={rotatePdf} className="pdf-reader-control rounded-xl border p-2 text-slate-600 hover:bg-sky-50" aria-label="Rotate page clockwise" title="Rotate clockwise">
+            <RotateCw className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={downloadPdf} className="pdf-reader-control rounded-xl border p-2 text-slate-600 hover:bg-sky-50" aria-label="Download PDF" title="Download PDF">
+            <Download className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={printPdf} className="pdf-reader-control rounded-xl border p-2 text-slate-600 hover:bg-sky-50" aria-label="Open PDF for printing" title="Print PDF">
+            <Printer className="h-4 w-4" />
+          </button>
           <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800">
             <button
               type="button"
@@ -933,11 +874,14 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         {/* Left Panel: Page Thumbnails & Navigation */}
         {isPagePanelOpen && (
         <aside className="pdf-reader-sidebar w-56 shrink-0 border-r flex flex-col" aria-label="Page navigation">
-          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-700">Pages ({totalPages})</span>
-            <span className="text-sky-600 font-mono">{progressPercent}% studied</span>
+          <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setSidebarTab('pages')} className={`rounded-lg px-2 py-1 font-semibold ${sidebarTab === 'pages' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}><BookOpen className="mr-1 inline h-3.5 w-3.5" />Pages</button>
+              <button type="button" onClick={() => setSidebarTab('outline')} className={`rounded-lg px-2 py-1 font-semibold ${sidebarTab === 'outline' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}><Bookmark className="mr-1 inline h-3.5 w-3.5" />Contents</button>
+            </div>
+            <span className="text-sky-600 font-mono">{progressPercent}%</span>
           </div>
-          <div className="pdf-thumbnail-list flex-1 overflow-y-auto p-3 space-y-3">
+          {sidebarTab === 'pages' ? <div className="pdf-thumbnail-list flex-1 overflow-y-auto p-3 space-y-3">
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNumber => {
               const isStudied = studiedSet.has(pageNumber);
               const isCurrent = currentPage === pageNumber;
@@ -981,25 +925,21 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
                 </button>
               );
             })}
-          </div>
+          </div> : <nav className="flex-1 overflow-y-auto p-3" aria-label="Document contents">
+            {outline.length === 0 ? <p className="px-2 py-6 text-center text-xs text-slate-400">This PDF does not contain a bookmarks outline.</p> : outline.map((item: any, index: number) => (
+              <button key={`${index}-${item.title}`} type="button" onClick={() => goToOutlineItem(item)} className="mb-1 flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left text-xs leading-relaxed text-slate-700 hover:bg-sky-50 hover:text-sky-700">
+                <Bookmark className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" /><span>{item.title}</span>
+              </button>
+            ))}
+          </nav>}
         </aside>
         )}
 
-        {/* Center Panel: PDF Viewer */}
-        <main
-          ref={mainScrollContainerRef}
-          className="pdf-reader-canvas min-w-0 flex-1 overflow-auto flex flex-col items-center p-6 relative"
-        >
-          {readingMode === 'single' ? (
-            <div className="flex flex-col items-center pb-20">
-              <div className="pdf-page-surface" data-page-number={currentPage}>
-                <canvas ref={canvasRef} className="pdf-reader-page-canvas max-w-full shadow-xl rounded-sm bg-white border border-slate-200" />
-                <div ref={textLayerRef} className="textLayer pdf-text-layer" />
-              </div>
-            </div>
-          ) : (
-            <div ref={continuousContainerRef} className="w-full flex flex-col items-center pb-24" />
-          )}
+        {/* Center Panel: PDF.js's maintained viewer handles page virtualization and text layers. */}
+        <main className="pdf-reader-canvas min-w-0 flex-1 relative">
+          <div ref={mainScrollContainerRef} className="pdfjs-viewer-container" aria-label="PDF pages">
+            <div ref={pdfViewerElementRef} className="pdfViewer" />
+          </div>
 
           {/* Floating Bottom Pagination Controls (Always available in both modes) */}
           <div className="pdf-reader-pagination fixed bottom-6 flex items-center gap-4 backdrop-blur px-5 py-2.5 rounded-full border shadow-xl z-30">
@@ -1012,9 +952,19 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <span className="text-xs font-mono font-medium text-slate-700">
-              Page {currentPage} of {totalPages}
-            </span>
+            <form className="flex items-center gap-1" onSubmit={event => { event.preventDefault(); const page = Number(pageInput); if (Number.isFinite(page)) navigateToPage(Math.min(totalPages, Math.max(1, page))); }}>
+              <input
+                aria-label="Current page number"
+                type="number"
+                min={1}
+                max={totalPages}
+                value={pageInput}
+                onChange={event => setPageInput(event.target.value)}
+                onBlur={() => setPageInput(String(currentPage))}
+                className="w-12 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-center text-xs font-mono text-slate-700 outline-none focus:border-sky-400"
+              />
+              <span className="text-xs font-mono text-slate-500">/ {totalPages}</span>
+            </form>
             <button
               type="button"
               onClick={() => navigateToPage(currentPage + 1)}
@@ -1037,6 +987,28 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       </aside>}
 
       </div>
+
+      {searchOpen && (
+        <div className="pdf-find-bar" role="search" aria-label="Find in PDF">
+          <Search className="h-4 w-4 shrink-0 text-slate-400" />
+          <input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={event => handleSearch(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter') { event.preventDefault(); handleSearch(searchQuery, event.shiftKey); }
+              if (event.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); pdfFindControllerRef.current?.executeCommand('find', { query: '' }); }
+            }}
+            placeholder="Find in document"
+            aria-label="Search text in PDF"
+            className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+          />
+          <span className="whitespace-nowrap text-[11px] text-slate-500">{searchMatches.total ? `${searchMatches.current} of ${searchMatches.total}` : searchQuery ? 'No matches yet' : ''}</span>
+          <button type="button" onClick={() => handleSearch(searchQuery, true)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Previous match"><ChevronLeft className="h-4 w-4" /></button>
+          <button type="button" onClick={() => handleSearch(searchQuery)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Next match"><ChevronRight className="h-4 w-4" /></button>
+          <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(''); setSearchMatches({ current: 0, total: 0 }); pdfFindControllerRef.current?.executeCommand('find', { query: '' }); }} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Close search"><X className="h-4 w-4" /></button>
+        </div>
+      )}
 
       {selectedText && selectionPanel && (
         <div className="pdf-selection-popover" style={{ top: Math.max(12, selectedText.top - 58), left: Math.max(12, Math.min(selectedText.left, window.innerWidth - 290)) }} aria-label="Selected text actions">
