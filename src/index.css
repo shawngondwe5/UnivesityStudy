@@ -725,10 +725,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
   .pdf-reader-toolbar select { max-width: 94px; }
   .pdf-note-popup { left: 8px !important; right: 8px; top: auto !important; bottom: 8px; width: auto !important; height: min(68dvh, 560px) !important; min-height: 260px; max-height: 72dvh; }
   .pdf-note-connector { display: none; }
+  .pdf-note-resize { display: none; }
 }
 @media (max-width: 380px) {
   .pdf-reader-header > div:first-child > div > div:last-child { display: none; }
   .pdf-reader-toolbar { gap: 3px !important; }
   .pdf-reader-toolbar select { max-width: 82px; }
-  .pdf-reader-toolbar button span { display: none; }
 }
