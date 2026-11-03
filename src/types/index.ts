@@ -62,3 +62,14 @@ export interface AppSettings {
   defaultReadingMode: 'single' | 'continuous';
   sampleDataCleanupVersion?: number;
 }
+
+ 
+export interface StudyNote {
+  id: string;
+  pdfId: string;
+  pageNumber: number;
+  selectedText: string;
+  noteText: string;
+  createdAt: number;
+  updatedAt: number;
+}
