@@ -14,7 +14,7 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Open the local Vite address printed in the terminal (normally `http://localhost:3000`).
+Open the local address printed in the terminal (normally `http://localhost:3000`). The Express server hosts Vite during development and serves the production build when `NODE_ENV=production`.
 
 ## Checks
 
@@ -24,6 +24,13 @@ bun run build
 ```
 
 The lint script runs the TypeScript compiler without emitting files. The production build checks that Vite can bundle the application.
+
+## PDF text tools and AI summaries
+
+- Select text in the PDF to open a small floating menu for saving a note or asking Gemini to summarize the passage.
+- Notes are saved locally in IndexedDB and remain attached to the PDF and page.
+- AI summaries are sent to the server-side `/api/ai/summarize` route. The Gemini key is read only from the server environment and is never placed in the browser bundle.
+- In Google AI Studio, configure `GEMINI_API_KEY` in the app's Secrets settings. For local use, set `GEMINI_API_KEY` in your environment before running `bun run dev`. The summary endpoint returns a clear setup message when the secret is missing.
 
 ## Data and privacy
 
