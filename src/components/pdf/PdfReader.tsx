@@ -187,7 +187,6 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const [showResumeModal, setShowResumeModal] = useState<boolean>(false);
   const [selectedText, setSelectedText] = useState<{ text: string; pageNumber: number; top: number; left: number; rects: { x: number; y: number; w: number; h: number }[] } | null>(null);
   const [selectionPanel, setSelectionPanel] = useState<'actions' | 'note' | 'summary' | null>(null);
-  const [noteDraft, setNoteDraft] = useState('');
   const [summary, setSummary] = useState('');
   const [summaryError, setSummaryError] = useState('');
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -332,17 +331,27 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     };
   }, [currentPage, selectionPanel]);
 
-  const handleSaveSelectedNote = async () => {
-    if (!selectedText || !noteDraft.trim()) return;
+  // Add note follows the same floating-card workflow as Explain simply:
+  // create the linked highlight/note first, then open the full card editor.
+  const handleCreateSelectedNote = async () => {
+    if (!selectedText) return;
     const now = Date.now();
-    const note: StudyNote = { id: crypto.randomUUID(), pdfId: pdfDoc.id, pageNumber: selectedText.pageNumber, selectedText: selectedText.text, noteText: noteDraft.trim(), highlight: { color: noteColor, rects: selectedText.rects }, createdAt: now, updatedAt: now };
+    const note: StudyNote = {
+      id: crypto.randomUUID(),
+      pdfId: pdfDoc.id,
+      pageNumber: selectedText.pageNumber,
+      selectedText: selectedText.text,
+      noteText: '',
+      highlight: { color: noteColor, rects: selectedText.rects },
+      createdAt: now,
+      updatedAt: now
+    };
     await db.notes.add(note);
-    setNoteDraft('');
     setSelectionPanel(null);
-    openNotePopup(note.id, 'edit');
-    setNoteEditDraft(note.noteText);
     setSelectedText(null);
     window.getSelection()?.removeAllRanges();
+    openNotePopup(note.id, 'edit');
+    setNoteEditDraft('');
   };
 
   const handleSummarizeSelection = async () => {
@@ -1220,15 +1229,9 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       {selectedText && selectionPanel && (
         <div className="pdf-selection-popover" style={{ top: Math.max(12, selectedText.top - 58), left: Math.max(12, Math.min(selectedText.left, window.innerWidth - 290)) }} aria-label="Selected text actions">
           {selectionPanel === 'actions' && <div className="flex items-center gap-1" onMouseDown={event => event.preventDefault()}>
-            <button type="button" onClick={() => { setNoteDraft(''); setSelectionPanel('note'); }} className="pdf-selection-action"><StickyNote className="h-4 w-4" /><span>Add note</span></button>
+            <button type="button" onClick={handleCreateSelectedNote} className="pdf-selection-action"><StickyNote className="h-4 w-4" /><span>Add note</span></button>
             <button type="button" onClick={handleSummarizeSelection} className="pdf-selection-action pdf-selection-ai"><Sparkles className="h-4 w-4" /><span>Explain simply</span></button>
             <button type="button" onClick={() => { setSelectionPanel(null); setSelectedText(null); }} className="pdf-selection-close" aria-label="Hide selection actions" title="Hide"><X className="h-4 w-4" /></button>
-          </div>}
-          {selectionPanel === 'note' && <div className="w-72 space-y-2">
-            <div className="flex items-center justify-between gap-2"><strong className="text-xs">Quick note · Page {selectedText.pageNumber}</strong><button type="button" onClick={() => setSelectionPanel('actions')} aria-label="Back to selection actions"><X className="h-4 w-4" /></button></div>
-            <p className="pdf-selection-quote">“{selectedText.text.slice(0, 180)}{selectedText.text.length > 180 ? '…' : ''}”</p>
-            <textarea autoFocus rows={3} maxLength={500} value={noteDraft} onChange={event => setNoteDraft(event.target.value)} placeholder="Write a short note about this passage…" className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-800 outline-none focus:border-sky-400" />
-            <div className="flex items-center justify-between gap-2"><label className="text-[10px] text-slate-500">Highlight <select value={noteColor} onChange={event => setNoteColor(event.target.value as typeof noteColor)} className="ml-1 rounded border border-slate-200 bg-white p-1 text-[10px]"><option value="yellow">Yellow</option><option value="green">Green</option><option value="pink">Pink</option><option value="blue">Blue</option><option value="orange">Orange</option></select></label><button type="button" onClick={handleSaveSelectedNote} disabled={!noteDraft.trim()} className="pdf-selection-save"><Save className="h-3.5 w-3.5" /> Save note</button></div>
           </div>}
           {selectionPanel === 'summary' && <div className="w-80 max-w-[calc(100vw-48px)] space-y-2">
             <div className="flex items-center justify-between gap-2"><strong className="text-xs flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> AI explanation</strong><button type="button" onClick={() => setSelectionPanel('actions')} aria-label="Back to selection actions"><X className="h-4 w-4" /></button></div>
