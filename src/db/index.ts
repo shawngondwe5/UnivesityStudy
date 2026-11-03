@@ -17,19 +17,6 @@ export class StudyTrackerDB extends Dexie {
       sessions: 'id, pdfId, courseId, sessionType, startedAt, dateKey, isUnfinished',
       settings: 'id'
     });
-    this.version(2).stores({
-      courses: 'id, name, createdAt, isDeleted',
-      lectures: 'id, courseId, order, isDeleted',
-      pdfs: 'id, lectureId, courseId, order, isDeleted, lastReadAt',
-      sessions: 'id, pdfId, courseId, sessionType, startedAt, dateKey, isUnfinished',
-      settings: 'id'
-    }).upgrade(async tx => {
-      // Remove only the known built-in demo records from existing installations.
-      await tx.table('sessions').delete('session-seed-1');
-      await tx.table('pdfs').bulkDelete(['pdf-wm-arch', 'pdf-sem-enc']);
-      await tx.table('lectures').bulkDelete(['lec-working-mem', 'lec-semantic-enc']);
-      await tx.table('courses').delete('course-cog-psy-101');
-    });
   }
 }
 
