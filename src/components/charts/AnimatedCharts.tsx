@@ -14,6 +14,15 @@ const formatMinutes = (minutes: number) => {
 };
 
 export const StudyBarChart: React.FC<{ data: DailyChartPoint[]; compact?: boolean }> = ({ data, compact = false }) => {
+  const hasActivity = data.some(item => item.firstTime > 0 || item.revision > 0);
+  if (!hasActivity) {
+    return (
+      <div className="chart-empty-state">
+        <p>No study activity recorded yet.</p>
+        <span>Complete a study session and your real daily activity will appear here.</span>
+      </div>
+    );
+  }
   const max = Math.max(30, ...data.map(d => d.firstTime + d.revision));
   return (
     <div className={`study-bars ${compact ? 'study-bars-compact' : ''}`} role="img" aria-label="Daily study time split between first-time study and revision">
@@ -100,7 +109,7 @@ export const ActivityHeatmap: React.FC<{ data: { date: string; minutes: number }
           <span key={day.key} className={`heatmap-cell level-${level(day.minutes)}`} title={`${day.key}: ${formatMinutes(day.minutes)}`} />
         ))}
       </div>
-      <div className="heatmap-foot"><span>Each square represents one day</span><span>{data.filter(d => d.minutes > 0).length} active days in recorded data</span></div>
+      <div className="heatmap-foot"><span>Each square represents one day</span><span>{days.filter(day => day.minutes > 0).length} active days in this period</span></div>
     </div>
   );
 };
