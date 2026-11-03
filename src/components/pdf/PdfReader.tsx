@@ -56,17 +56,17 @@ try {
 const stripAiFormatting = (value: string) => value.replace(/```[\s\S]*?```/g, block => block.replace(/^```[^\n]*\n?|```$/g, '')).replace(/\*\*(.*?)\*\*/g, '$1').replace(/__(.*?)__/g, '$1').replace(/^\s{0,3}#{1,6}\s+/gm, '').replace(/^\s*\*\s+/gm, '• ').replace(/^\s*-\s+/gm, '• ').trim();
 const HIGHLIGHT_COLORS: Record<string, string> = { yellow: 'rgba(255,214,10,.48)', green: 'rgba(52,211,153,.42)', pink: 'rgba(244,114,182,.40)', blue: 'rgba(96,165,250,.42)', orange: 'rgba(249,115,22,.48)' };
 const NOTE_CARD_COLORS: Record<string, string> = { yellow: '#fff2b8', green: '#d8f5df', pink: '#fbe0ed', blue: '#dcecff', orange: '#ffe3c7' };
-const renderNoteInline = (line: string) => line.split(/(\\*\\*.*?\\*\\*|_.*?_|<u>.*?<\\/u>)/g).map((part, index) => {
+const renderNoteInline = (line: string) => line.split(/(\*\*.*?\*\*|_.*?_|<u>.*?<\/u>)/g).map((part, index) => {
   if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
   if (part.startsWith('_') && part.endsWith('_')) return <em key={index}>{part.slice(1, -1)}</em>;
   if (part.startsWith('<u>') && part.endsWith('</u>')) return <u key={index}>{part.slice(3, -4)}</u>;
   return part;
 });
 const renderStudyNoteText = (value: string) => {
-  const lines = value.split(/\\r?\\n/);
-  const items = lines.filter(line => /^\\s*•\\s+/.test(line));
-  if (items.length === lines.length) return <ul className="list-disc pl-5">{items.map((line, index) => <li key={index}>{renderNoteInline(line.replace(/^\\s*•\\s+/, ''))}</li>)}</ul>;
-  return lines.map((line, index) => /^\\s*•\\s+/.test(line)
+  const lines = value.split(/\r?\n/);
+  const items = lines.filter(line => /^\s*•\s+/.test(line));
+  if (items.length === lines.length) return <ul className="list-disc pl-5">{items.map((line, index) => <li key={index}>{renderNoteInline(line.replace(/^\s*•\s+/, ''))}</li>)}</ul>;
+  return lines.map((line, index) => /^\s*•\s+/.test(line)
     ? <p key={index} className="pl-3">{renderNoteInline(line)}</p>
     : <p key={index}>{renderNoteInline(line)}</p>);
 };
