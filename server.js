@@ -38,8 +38,8 @@ app.post('/api/ai/summarize', async (req, res) => {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const mode = req.body?.mode === 'explain' ? 'explain' : 'summarize';
     const instruction = mode === 'explain'
-      ? 'Explain the selected passage in very simple English for a university student. Define difficult terms, explain the main idea and preserve the original meaning. Do not add facts that are not in the passage. Keep it clear and concise.'
-      : 'Summarize the selected passage in simple English. Keep the summary short, explain important terms, preserve the original meaning, and do not add facts that are not in the passage. Use 3-5 concise bullet points where appropriate.';
+      ? 'Explain the selected passage in very simple, everyday English for a university student. Be brief: use 2-4 short sentences and stay under 70 words. Explain only the main idea and define a difficult term only if it is necessary to understand the passage. Do not add facts, examples, background information, introductions, or repeated points that are not needed. Preserve the original meaning.'
+      : 'Summarize the selected passage in very simple, everyday English. Be brief: use no more than 3 short bullet points and stay under 70 words. Include only the most important ideas. Do not add facts, examples, background information, introductions, or repeated points. Preserve the original meaning.';
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: `You are a clear, careful university study assistant. ${instruction}\n\nDocument: ${documentName}\nPage: ${pageNumber ?? 'unknown'}\n\nSelected passage:\n${selectedText}`
