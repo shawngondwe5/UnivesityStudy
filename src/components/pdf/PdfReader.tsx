@@ -55,7 +55,7 @@ try {
 
 const stripAiFormatting = (value: string) => value.replace(/```[\s\S]*?```/g, block => block.replace(/^```[^\n]*\n?|```$/g, '')).replace(/\*\*(.*?)\*\*/g, '$1').replace(/__(.*?)__/g, '$1').replace(/^\s{0,3}#{1,6}\s+/gm, '').replace(/^\s*\*\s+/gm, '• ').replace(/^\s*-\s+/gm, '• ').trim();
 const HIGHLIGHT_COLORS: Record<string, string> = { yellow: 'rgba(255,214,10,.48)', green: 'rgba(52,211,153,.42)', pink: 'rgba(244,114,182,.40)', blue: 'rgba(96,165,250,.42)', orange: 'rgba(249,115,22,.48)' };
-const NOTE_CARD_COLORS: Record<string, string> = { yellow: '#fff2b8', green: '#d8f5df', pink: '#fbe0ed', blue: '#dcecff', orange: '#ffe3c7' };
+const NOTE_CARD_COLORS: Record<string, string> = { yellow: '#FFD84D', green: '#B8F56A', pink: '#FF9BCB', blue: '#8BD5FF', orange: '#FFB36B' };
 const renderNoteInline = (line: string) => line.split(/(\*\*.*?\*\*|_.*?_|<u>.*?<\/u>)/g).map((part, index) => {
   if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
   if (part.startsWith('_') && part.endsWith('_')) return <em key={index}>{part.slice(1, -1)}</em>;
