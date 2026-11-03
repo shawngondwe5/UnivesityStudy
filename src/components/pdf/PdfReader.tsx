@@ -499,18 +499,22 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
   const handleSearch = (query: string, again = false, previous = false) => {
     setSearchQuery(query);
+    const eventBus = pdfEventBusRef.current;
     if (!query.trim()) {
       setSearchMatches({ current: 0, total: 0 });
-      pdfFindControllerRef.current?.executeCommand('find', { query: '' });
+      eventBus?.dispatch('find', { source: readerRootRef.current, type: '', query: '' });
       return;
     }
     if (!again) setSearchMatches({ current: 0, total: 0 });
-    pdfFindControllerRef.current?.executeCommand(again ? 'findagain' : 'find', {
+    eventBus?.dispatch('find', {
+      source: readerRootRef.current,
+      type: again ? 'again' : '',
       query,
-      phraseSearch: true,
       caseSensitive: false,
+      entireWord: false,
       highlightAll: true,
-      findPrevious: previous
+      findPrevious: previous,
+      matchDiacritics: false
     });
   };
 
@@ -522,6 +526,21 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       linkService.goToDestination(item.dest);
     }
   };
+
+  const renderOutlineItems = (items: any[], depth = 0): React.ReactNode => items.map((item: any, index: number) => (
+    <React.Fragment key={`${depth}-${index}-${item.title}`}>
+      <button
+        type="button"
+        onClick={() => goToOutlineItem(item)}
+        style={{ paddingLeft: 8 + depth * 14 }}
+        className="mb-1 flex w-full items-start gap-2 rounded-lg py-2 pr-2 text-left text-xs leading-relaxed text-slate-700 hover:bg-sky-50 hover:text-sky-700"
+      >
+        <Bookmark className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <span>{item.title}</span>
+      </button>
+      {item.items?.length > 0 && renderOutlineItems(item.items, depth + 1)}
+    </React.Fragment>
+  ));
 
   const downloadPdf = () => {
     const url = URL.createObjectURL(pdfDoc.blob);
@@ -834,7 +853,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             </button>
           </div>
 
-          <button type="button" onClick={rotatePdf} className="pdf-reader-control rounded-xl border p-2 text-slate-600 hover:bg-sky-50" aria-label="Rotate page clockwise" title="Rotate clockwise">
+          <button type="button" onClick={rotatePdf} className="pdf-reader-control rounded-xl border p-2 text-slate-600 hover:bg-sky-50" aria-label={`Rotate page clockwise, current rotation ${rotation} degrees`} title={`Rotate clockwise (currently ${rotation}°)`}>
             <RotateCw className="h-4 w-4" />
           </button>
           <button type="button" onClick={downloadPdf} className="pdf-reader-control rounded-xl border p-2 text-slate-600 hover:bg-sky-50" aria-label="Download PDF" title="Download PDF">
@@ -930,11 +949,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
               );
             })}
           </div> : <nav className="flex-1 overflow-y-auto p-3" aria-label="Document contents">
-            {outline.length === 0 ? <p className="px-2 py-6 text-center text-xs text-slate-400">This PDF does not contain a bookmarks outline.</p> : outline.map((item: any, index: number) => (
-              <button key={`${index}-${item.title}`} type="button" onClick={() => goToOutlineItem(item)} className="mb-1 flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left text-xs leading-relaxed text-slate-700 hover:bg-sky-50 hover:text-sky-700">
-                <Bookmark className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" /><span>{item.title}</span>
-              </button>
-            ))}
+            {outline.length === 0 ? <p className="px-2 py-6 text-center text-xs text-slate-400">This PDF does not contain a bookmarks outline.</p> : renderOutlineItems(outline)}
           </nav>}
         </aside>
         )}
