@@ -383,3 +383,80 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
   .pdf-reader-body { isolation: isolate; }
   .pdf-reader-canvas { width: 100%; }
 }
+
+
+/* Premium, calm surfaces: clearer hierarchy without changing app behaviour. */
+.analytics-card {
+  border: 1px solid #e8edf1;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfdfe 100%);
+  box-shadow: 0 2px 5px rgba(15, 35, 50, .025), 0 12px 34px rgba(15, 35, 50, .035);
+  transition: transform .24s ease, box-shadow .24s ease, border-color .24s ease;
+}
+.analytics-card:hover {
+  transform: translateY(-2px);
+  border-color: #d5e7ef;
+  box-shadow: 0 5px 12px rgba(15, 35, 50, .035), 0 18px 42px rgba(15, 75, 105, .075);
+}
+.analytics-stat {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #e8edf1;
+  border-radius: 22px;
+  background: #fff;
+  padding: 21px;
+  box-shadow: 0 2px 5px rgba(15, 35, 50, .02), 0 10px 28px rgba(15, 35, 50, .035);
+}
+.analytics-stat:before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, #087fbd, #55c8ed 58%, #caff58);
+  opacity: .78;
+}
+.analytics-stat:hover { transform: translateY(-3px); border-color: #cfe5ef; }
+.analytics-stat-icon { width: 40px; height: 40px; border-radius: 14px; }
+.analytics-stat-icon svg { width: 18px; height: 18px; }
+.analytics-stat p { margin-top: 15px; font-size: 11px; letter-spacing: .015em; }
+.analytics-stat strong { margin-top: 5px; font-size: clamp(25px, 2.4vw, 32px); letter-spacing: -.055em; }
+.analytics-stat small { margin-top: 5px; font-size: 10px; }
+.course-progress-item {
+  position: relative;
+  padding: 17px;
+  border-radius: 17px;
+  background: linear-gradient(145deg, #fff, #f9fcfe);
+  box-shadow: 0 3px 12px rgba(15, 35, 50, .025);
+}
+.course-progress-item:hover { transform: translateY(-3px); box-shadow: 0 12px 24px rgba(8, 127, 189, .08); }
+.course-library-card, .lecture-library-card, .pdf-library-card, .course-overview-stat {
+  border-color: #e7edf1 !important;
+  box-shadow: 0 3px 14px rgba(19, 48, 65, .035);
+  transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+}
+.course-library-card:hover, .lecture-library-card:hover, .pdf-library-card:hover {
+  border-color: #c6e4f0 !important;
+  box-shadow: 0 12px 30px rgba(12, 74, 102, .075);
+}
+.course-library-card { border-radius: 23px !important; }
+.lecture-library-card { border-radius: 22px !important; }
+.pdf-library-card { border-radius: 18px !important; background: linear-gradient(145deg, #fff, #fbfdff) !important; }
+.course-overview-stat { border-radius: 19px !important; padding: 18px !important; background: linear-gradient(145deg, #fff, #fbfdff) !important; }
+.pdf-open-action { border-radius: 999px !important; padding: 9px 15px !important; box-shadow: 0 5px 12px rgba(8, 127, 189, .16); }
+.pdf-open-action:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(8, 127, 189, .22); }
+.pdf-reader-sidebar { transition: width .2s ease; }
+.pdf-reader-sidebar .pdf-thumbnail-card { border-radius: 13px; }
+.pdf-reader-pagination { padding: 9px 15px; }
+@media (max-width: 720px) {
+  .analytics-stat { padding: 16px; border-radius: 18px; }
+  .analytics-card { border-radius: 19px; }
+  .course-overview-stat { padding: 13px !important; }
+  .pdf-library-card { min-width: 0; }
+  .pdf-reader-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .pdf-reader-header > div:first-child { grid-column: 1; min-width: 0; }
+  .pdf-reader-header > div:last-child { grid-column: 2; grid-row: 1; min-width: 0; }
+  .pdf-reader-toolbar { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .analytics-card, .analytics-stat, .course-library-card, .lecture-library-card, .pdf-library-card, .pdf-open-action { transition: none !important; }
+}
