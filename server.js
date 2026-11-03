@@ -38,7 +38,7 @@ app.post('/api/ai/summarize', async (req, res) => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const mode = req.body?.mode === 'explain' ? 'explain' : 'summarize';
-    const looksLikeQuestion = /\\?\\s*$/.test(selectedText) || /^(what|why|how|when|where|who|which|is|are|was|were|do|does|did|can|could|would|should|will|define|explain|describe|name|list)\\b/i.test(selectedText);
+    const looksLikeQuestion = /\?\s*$/.test(selectedText) || /^(what|why|how|when|where|who|which|is|are|was|were|do|does|did|can|could|would|should|will|define|explain|describe|name|list)\\b/i.test(selectedText);
     const isShortSelection = selectedText.split(/\\s+/).filter(Boolean).length <= 4;
     const instruction = mode === 'explain'
       ? (looksLikeQuestion
