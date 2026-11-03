@@ -314,7 +314,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       const pageElement = textLayer.closest<HTMLElement>('.page[data-page-number]'); const pageNumber = Number(pageElement?.dataset.pageNumber || currentPage);
       const viewport = pdfViewerRef.current?.getPageView(pageNumber - 1)?.viewport; const pageRect = pageElement?.getBoundingClientRect();
       const rects = viewport && pageRect ? Array.from(range.getClientRects()).map(r => { const sx = viewport.width / pageRect.width, sy = viewport.height / pageRect.height; const a = viewport.convertToPdfPoint((r.left-pageRect.left)*sx,(r.top-pageRect.top)*sy); const b = viewport.convertToPdfPoint((r.right-pageRect.left)*sx,(r.bottom-pageRect.top)*sy); return { x: Math.min(a[0],b[0]), y: Math.min(a[1],b[1]), w: Math.abs(b[0]-a[0]), h: Math.abs(b[1]-a[1]) }; }).filter(r => r.w > 0 && r.h > 0) : [];
-      const pageText = (textLayer.textContent || '').replace(/\\s+/g, ' ').trim();
+      const pageText = (textLayer.textContent || '').replace(/\s+/g, ' ').trim();
       const selectedIndex = pageText.toLocaleLowerCase().indexOf(text.toLocaleLowerCase());
       const contextText = selectedIndex >= 0
         ? pageText.slice(Math.max(0, selectedIndex - 240), Math.min(pageText.length, selectedIndex + text.length + 240)).trim()
