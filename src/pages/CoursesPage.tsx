@@ -122,23 +122,28 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
             return (
               <article
                 key={course.id}
-                className="course-library-card p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-blue-500 dark:hover:border-blue-500 transition flex flex-col justify-between group"
+                role="button"
+                tabIndex={0}
+                aria-label={`Open course ${course.name}`}
+                onClick={() => onOpenCourse(course.id)}
+                onKeyDown={event => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onOpenCourse(course.id);
+                  }
+                }}
+                className="course-library-card p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-blue-500 dark:hover:border-blue-500 transition flex flex-col justify-between group cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="min-w-0 text-base font-bold text-slate-900 dark:text-white truncate">
-                      <button
-                        type="button"
-                        onClick={() => onOpenCourse(course.id)}
-                        className="text-left hover:text-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 rounded"
-                      >
-                        {course.name}
-                      </button>
+                      <span className="text-left">{course.name}</span>
                     </h3>
                     <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
                       <button
                         type="button"
-                        onClick={() => handleOpenEdit(course)}
+                        onClick={event => { event.stopPropagation(); handleOpenEdit(course); }}
                         aria-label={`Edit course ${course.name}`}
                         className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 cursor-pointer"
                         title="Edit Course"
@@ -147,7 +152,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setCourseToDelete(course)}
+                        onClick={event => { event.stopPropagation(); setCourseToDelete(course); }}
                         aria-label={`Delete course ${course.name}`}
                         className="p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-600 cursor-pointer"
                         title="Delete Course"
