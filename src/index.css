@@ -668,3 +668,67 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
   .pdf-reader-header > div:last-child { flex: 1 1 100%; justify-content: flex-end; }
   .pdf-note-popup { max-height: min(72dvh, 620px); }
 }
+
+
+/* Study-note cards: opaque highlight-tinted surfaces with compact editing controls. */
+.pdf-reader-header { min-height: 44px !important; flex-wrap: nowrap !important; gap: 7px !important; padding: 5px 9px !important; }
+.pdf-reader-header > div:first-child { gap: 8px !important; min-width: 0; }
+.pdf-reader-header > div:first-child > div { max-width: min(250px, 22vw); }
+.pdf-reader-header > div:first-child > div > div:first-child { font-size: 12px !important; line-height: 1.2; }
+.pdf-reader-header > div:first-child > div > div:last-child { font-size: 9px !important; line-height: 1.2; }
+.pdf-reader-button, .pdf-reader-control { min-height: 29px !important; padding: 4px 7px !important; border-radius: 8px !important; font-size: 10px !important; }
+.pdf-reader-toolbar { gap: 5px !important; padding: 3px 5px !important; }
+.pdf-reader-toolbar button { min-height: 28px !important; padding: 4px 7px !important; }
+.pdf-reader-toolbar > div:first-child { gap: 5px !important; }
+.pdf-reader-toolbar > div:first-child span:last-child { font-size: 12px !important; }
+.pdf-reader-toolbar select { max-width: 112px; font-size: 10px !important; }
+.pdf-reader-header > div:last-child { gap: 5px !important; }
+.pdf-reader-control svg, .pdf-reader-button svg { width: 14px !important; height: 14px !important; }
+.pdf-note-connector { position: fixed; inset: 0; z-index: 99; width: 100vw; height: 100vh; overflow: visible; pointer-events: none; }
+.pdf-note-connector path { fill: none; stroke: rgba(45,65,72,.72); stroke-width: 1.7; stroke-linecap: round; stroke-dasharray: 4 3; }
+.pdf-note-connector circle { fill: #26333a; stroke: #fff; stroke-width: 1.5; }
+.pdf-note-popup { position: fixed; z-index: 100; display: flex; flex-direction: column; min-width: 280px; min-height: 260px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: hidden; border: 1px solid rgba(35,55,65,.16); border-radius: 16px; background: #fff2b8; color: #26333a; box-shadow: 0 16px 44px rgba(23,39,47,.24); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.pdf-note-popup-header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-bottom: 1px solid rgba(35,55,65,.13); background: rgba(255,255,255,.28); cursor: grab; touch-action: none; user-select: none; }
+.pdf-note-popup-header:active { cursor: grabbing; }
+.pdf-note-popup-header > div:first-child { display: grid; gap: 2px; }
+.pdf-note-popup-header strong { font-size: 12px; font-weight: 800; }
+.pdf-note-popup-header span { color: rgba(38,51,58,.68); font-size: 10px; }
+.pdf-note-popup-header button, .pdf-note-popup-content button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 28px; min-height: 28px; padding: 5px 7px; border-radius: 8px; color: #34454c; font-size: 10px; font-weight: 650; }
+.pdf-note-popup-header button:hover, .pdf-note-popup-content button:hover { background: rgba(255,255,255,.5); }
+.pdf-note-popup-header svg, .pdf-note-popup-content button svg { width: 14px; height: 14px; }
+.pdf-note-popup-content { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px; }
+.pdf-note-selected { margin-bottom: 10px; padding: 8px 10px; border-left: 3px solid rgba(38,51,58,.55); border-radius: 0 8px 8px 0; background: rgba(255,255,255,.38); color: rgba(38,51,58,.78); font-size: 11px; line-height: 1.5; }
+.pdf-note-body { margin: 8px 0 12px; font-size: 13px; line-height: 1.6; color: #26333a; }
+.pdf-note-ai { margin: 10px 0; padding: 10px; border-radius: 10px; background: rgba(255,255,255,.38); font-size: 11px; }
+.pdf-note-ai > strong { display: block; margin-bottom: 5px; font-size: 11px; }
+.pdf-note-ai p { font-size: 12px; line-height: 1.55; }
+.pdf-note-meta { margin: 12px 0; color: rgba(38,51,58,.66); font-size: 10px; line-height: 1.7; }
+.pdf-note-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding-top: 8px; border-top: 1px solid rgba(35,55,65,.13); }
+.pdf-note-actions button { background: rgba(255,255,255,.34); }
+.pdf-note-field-label { display: block; margin-bottom: 6px; font-size: 11px; font-weight: 750; }
+.pdf-note-formatting { display: flex; gap: 4px; margin-bottom: 6px; }
+.pdf-note-formatting button { min-width: 30px; min-height: 29px; background: rgba(255,255,255,.38); }
+.pdf-note-edit { display: block; width: 100%; min-height: 96px; max-height: 45%; resize: none; padding: 9px; border: 1px solid rgba(35,55,65,.22); border-radius: 9px; outline: none; background: rgba(255,255,255,.55); color: #26333a; font-size: 12px; line-height: 1.5; }
+.pdf-note-edit:focus { border-color: rgba(35,55,65,.55); box-shadow: 0 0 0 2px rgba(35,55,65,.08); }
+.pdf-note-edit-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; font-size: 10px; }
+.pdf-note-edit-options label { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.pdf-note-edit-options select { padding: 5px 7px; border: 1px solid rgba(35,55,65,.2); border-radius: 7px; background: rgba(255,255,255,.58); color: #26333a; font-size: 10px; }
+.pdf-note-explain { background: rgba(255,255,255,.4); }
+.pdf-note-save { padding: 7px 13px !important; border-radius: 8px; background: #263f48 !important; color: #fff !important; font-size: 11px; font-weight: 750; }
+.pdf-note-resize { position: absolute; right: 2px; bottom: 2px; width: 19px; height: 19px; border: 0; border-radius: 5px 0 13px 0; background: linear-gradient(135deg, transparent 45%, rgba(38,51,58,.24) 46%, rgba(38,51,58,.24) 53%, transparent 54%, transparent 64%, rgba(38,51,58,.24) 65%, rgba(38,51,58,.24) 72%, transparent 73%); cursor: nwse-resize; touch-action: none; }
+@media (max-width: 720px) {
+  .pdf-reader-header { display: flex; flex-wrap: wrap !important; min-height: auto !important; align-items: center; }
+  .pdf-reader-header > div:first-child { flex: 1 1 42%; }
+  .pdf-reader-header > div:first-child > div { max-width: calc(100vw - 100px); }
+  .pdf-reader-toolbar { order: 3; flex: 1 1 100%; justify-content: center; flex-wrap: nowrap; }
+  .pdf-reader-header > div:last-child { flex: 1 1 auto; justify-content: flex-end; }
+  .pdf-reader-toolbar select { max-width: 94px; }
+  .pdf-note-popup { left: 8px !important; right: 8px; top: auto !important; bottom: 8px; width: auto !important; height: min(68dvh, 560px) !important; min-height: 260px; max-height: 72dvh; }
+  .pdf-note-connector { display: none; }
+  .pdf-note-resize { display: none; }
+}
+@media (max-width: 380px) {
+  .pdf-reader-header > div:first-child > div > div:last-child { display: none; }
+  .pdf-reader-toolbar { gap: 3px !important; }
+  .pdf-reader-toolbar select { max-width: 82px; }
+}
