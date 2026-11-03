@@ -178,8 +178,11 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [noteColor, setNoteColor] = useState<'yellow' | 'green' | 'pink' | 'blue' | 'orange'>('yellow');
-  const [activeNotePopup, setActiveNotePopup] = useState<{ noteId: string; x: number; y: number; pinned: boolean } | null>(null);
+  const [activeNotePopup, setActiveNotePopup] = useState<{ noteId: string; x: number; y: number; width: number; height: number; pinned: boolean } | null>(null);
+  const [notePopupMode, setNotePopupMode] = useState<'edit' | 'info'>('info');
   const [noteEditDraft, setNoteEditDraft] = useState('');
+  const [notePopupConnector, setNotePopupConnector] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const notePopupRef = useRef<HTMLElement | null>(null);
   const [showMoreTools, setShowMoreTools] = useState(false);
   const notes = useLiveQuery(async () => {
     const saved = await db.notes.where('pdfId').equals(pdfDoc.id).toArray();
@@ -196,24 +199,51 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeThumbnailRef = useRef<HTMLButtonElement | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
-  const popupDragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
-  const openNotePopup = (noteId: string) => {
-    let saved = { x: Math.max(12, window.innerWidth - 410), y: 112 };
-    try { const raw = window.localStorage.getItem(`pdf-note-popup:${pdfDoc.id}`); if (raw) saved = { ...saved, ...JSON.parse(raw) }; } catch { /* Ignore invalid saved positions. */ }
-    setActiveNotePopup({ noteId, x: Math.max(12, Math.min(window.innerWidth - Math.min(390, window.innerWidth - 24) - 12, saved.x)), y: Math.max(12, Math.min(window.innerHeight - Math.min(620, window.innerHeight - 24) - 12, saved.y)), pinned: false });
+  const popupDragRef = useRef<{ pointerId: number; mode: 'move' | 'resize'; offsetX: number; offsetY: number; startX: number; startY: number; startWidth: number; startHeight: number } | null>(null);
+  const popupStorageKey = (noteId: string) => `pdf-note-popup:${pdfDoc.id}:${noteId}`;
+  const openNotePopup = (noteId: string, mode: 'edit' | 'info' = 'info') => {
+    const defaults = { x: Math.max(12, window.innerWidth - 410), y: 112, width: Math.min(390, window.innerWidth - 24), height: 460 };
+    let saved = defaults;
+    try { const raw = window.localStorage.getItem(popupStorageKey(noteId)); if (raw) saved = { ...defaults, ...JSON.parse(raw) }; } catch { /* Ignore invalid saved positions. */ }
+    const width = Math.max(280, Math.min(window.innerWidth - 24, saved.width));
+    const height = Math.max(260, Math.min(window.innerHeight - 24, saved.height));
+    setActiveNotePopup({ noteId, x: Math.max(12, Math.min(window.innerWidth - width - 12, saved.x)), y: Math.max(12, Math.min(window.innerHeight - height - 12, saved.y)), width, height, pinned: false });
+    setNotePopupMode(mode);
     setNoteEditDraft(notes.find(item => item.id === noteId)?.noteText || '');
   };
   useEffect(() => {
     if (!activeNotePopup) return;
-    const move = (event: PointerEvent) => { const drag = popupDragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; const width = Math.min(390, window.innerWidth - 24); const x = Math.max(12, Math.min(window.innerWidth - width - 12, event.clientX - drag.offsetX)); const popupHeight = Math.min(620, window.innerHeight - 24); const y = Math.max(12, Math.min(window.innerHeight - popupHeight - 12, event.clientY - drag.offsetY)); setActiveNotePopup(current => current ? { ...current, x, y } : current); window.localStorage.setItem(`pdf-note-popup:${pdfDoc.id}`, JSON.stringify({ x, y })); };
+    const persist = (next: typeof activeNotePopup) => { if (next) window.localStorage.setItem(popupStorageKey(next.noteId), JSON.stringify({ x: next.x, y: next.y, width: next.width, height: next.height })); };
+    const move = (event: PointerEvent) => {
+      const drag = popupDragRef.current; if (!drag || drag.pointerId !== event.pointerId) return;
+      setActiveNotePopup(current => {
+        if (!current) return current;
+        let next = current;
+        if (drag.mode === 'move') {
+          next = { ...current, x: Math.max(8, Math.min(window.innerWidth - current.width - 8, event.clientX - drag.offsetX)), y: Math.max(8, Math.min(window.innerHeight - current.height - 8, event.clientY - drag.offsetY)) };
+        } else {
+          next = { ...current, width: Math.max(280, Math.min(window.innerWidth - current.x - 12, drag.startWidth + event.clientX - drag.startX)), height: Math.max(260, Math.min(window.innerHeight - current.y - 12, drag.startHeight + event.clientY - drag.startY)) };
+        }
+        persist(next); return next;
+      });
+    };
     const up = () => { popupDragRef.current = null; };
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') setActiveNotePopup(null); };
-    const outside = (event: PointerEvent) => { if (!activeNotePopup.pinned && event.target instanceof Element && !event.target.closest('.pdf-note-popup')) setActiveNotePopup(null); };
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('keydown', key); document.addEventListener('pointerdown', outside);
-    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('keydown', key); document.removeEventListener('pointerdown', outside); };
+    const outside = (event: PointerEvent) => { if (!activeNotePopup.pinned && event.target instanceof Element && !event.target.closest('.pdf-note-popup, .pdf-note-connector')) setActiveNotePopup(null); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up); window.addEventListener('keydown', key); document.addEventListener('pointerdown', outside);
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); window.removeEventListener('keydown', key); document.removeEventListener('pointerdown', outside); };
   }, [activeNotePopup?.noteId, activeNotePopup?.pinned, pdfDoc.id]);
   useEffect(() => { const note = notes.find(item => item.id === activeNotePopup?.noteId); if (note) setNoteEditDraft(note.noteText || ''); }, [activeNotePopup?.noteId, notes]);
-  const saveNoteEdit = async () => { if (activeNotePopup) await db.notes.update(activeNotePopup.noteId, { noteText: noteEditDraft, updatedAt: Date.now() }); };
+  const saveNoteEdit = async () => { if (activeNotePopup) { await db.notes.update(activeNotePopup.noteId, { noteText: noteEditDraft, updatedAt: Date.now() }); setNotePopupMode('info'); } };
+  const cancelNoteEdit = () => { const note = notes.find(item => item.id === activeNotePopup?.noteId); setNoteEditDraft(note?.noteText || ''); setNotePopupMode('info'); };
+  const explainNote = async (note: StudyNote) => {
+    try {
+      const response = await fetch('/api/ai/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: note.selectedText, pageNumber: note.pageNumber, documentName: pdfDoc.filename, mode: 'explain' }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not generate an explanation.');
+      await db.notes.update(note.id, { aiExplanation: stripAiFormatting(typeof data.summary === 'string' ? data.summary : ''), updatedAt: Date.now() });
+    } catch (error) { window.alert(error instanceof Error ? error.message : 'Could not generate an explanation.'); }
+  };
   const insertNoteFormatting = (before: string, after = before) => { const area = document.querySelector<HTMLTextAreaElement>('.pdf-note-edit'); if (!area) return; const start = area.selectionStart, end = area.selectionEnd; setNoteEditDraft(noteEditDraft.slice(0,start) + before + noteEditDraft.slice(start,end) + after + noteEditDraft.slice(end)); requestAnimationFrame(() => { area.focus(); area.setSelectionRange(start + before.length, end + before.length); }); };
 
   // Keep the floating actions attached to real text selected in the PDF.js layer.
@@ -261,7 +291,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     await db.notes.add(note);
     setNoteDraft('');
     setSelectionPanel(null);
-    openNotePopup(note.id);
+    openNotePopup(note.id, 'edit');
     setSelectedText(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -278,7 +308,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       if (!response.ok) throw new Error(data.error || 'The summary could not be generated.');
       const explanation = stripAiFormatting(typeof data.summary === 'string' ? data.summary : ''); setSummary(explanation);
       const now = Date.now(); const note: StudyNote = { id: crypto.randomUUID(), pdfId: pdfDoc.id, pageNumber: selectedText.pageNumber, selectedText: selectedText.text, noteText: '', aiExplanation: explanation, highlight: { color: noteColor, rects: selectedText.rects }, createdAt: now, updatedAt: now };
-      await db.notes.add(note); setActiveNotePopup({ noteId: note.id, x: Math.max(12, window.innerWidth - 410), y: 112, pinned: false }); setSelectionPanel(null); setSelectedText(null); window.getSelection()?.removeAllRanges();
+      await db.notes.add(note); openNotePopup(note.id, 'edit'); setSelectionPanel(null); setSelectedText(null); window.getSelection()?.removeAllRanges();
     } catch (error) {
       setSummaryError(error instanceof Error ? error.message : 'The summary could not be generated.');
     } finally {
