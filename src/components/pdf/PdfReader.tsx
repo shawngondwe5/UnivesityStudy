@@ -27,6 +27,13 @@ import {
   Printer,
   Bookmark,
   BookOpen,
+  MoreHorizontal,
+  Copy,
+  Pin,
+  Bold,
+  Italic,
+  Underline,
+  List,
 } from 'lucide-react';
 // Use PDF.js's own viewer engine for virtualized page rendering, text layers,
 // selection, find highlighting, link navigation, and page/zoom management.
@@ -45,6 +52,9 @@ try {
 } catch (e) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 }
+
+const stripAiFormatting = (value: string) => value.replace(/```[\s\S]*?```/g, block => block.replace(/^```[^\n]*\n?|```$/g, '')).replace(/\*\*(.*?)\*\*/g, '$1').replace(/__(.*?)__/g, '$1').replace(/^\s{0,3}#{1,6}\s+/gm, '').replace(/^\s*\*\s+/gm, '• ').replace(/^\s*-\s+/gm, '• ').trim();
+const HIGHLIGHT_COLORS: Record<string, string> = { yellow: 'rgba(255,214,10,.48)', green: 'rgba(52,211,153,.42)', pink: 'rgba(244,114,182,.40)', blue: 'rgba(96,165,250,.42)', orange: 'rgba(249,115,22,.48)' };
 
 const PdfPageThumbnail: React.FC<{
   pdf: pdfjsLib.PDFDocumentProxy;
@@ -160,13 +170,17 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   // Modals
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
   const [showResumeModal, setShowResumeModal] = useState<boolean>(false);
-  const [selectedText, setSelectedText] = useState<{ text: string; pageNumber: number; top: number; left: number } | null>(null);
+  const [selectedText, setSelectedText] = useState<{ text: string; pageNumber: number; top: number; left: number; rects: { x: number; y: number; w: number; h: number }[] } | null>(null);
   const [selectionPanel, setSelectionPanel] = useState<'actions' | 'note' | 'summary' | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [summary, setSummary] = useState('');
   const [summaryError, setSummaryError] = useState('');
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
+  const [noteColor, setNoteColor] = useState<'yellow' | 'green' | 'pink' | 'blue' | 'orange'>('yellow');
+  const [activeNotePopup, setActiveNotePopup] = useState<{ noteId: string; x: number; y: number; pinned: boolean } | null>(null);
+  const [noteEditDraft, setNoteEditDraft] = useState('');
+  const [showMoreTools, setShowMoreTools] = useState(false);
   const notes = useLiveQuery(async () => {
     const saved = await db.notes.where('pdfId').equals(pdfDoc.id).toArray();
     return saved.sort((a, b) => b.createdAt - a.createdAt);
@@ -182,6 +196,24 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeThumbnailRef = useRef<HTMLButtonElement | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
+  const popupDragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
+  const openNotePopup = (noteId: string) => {
+    let saved = { x: Math.max(12, window.innerWidth - 410), y: 112 };
+    try { const raw = window.localStorage.getItem(`pdf-note-popup:${pdfDoc.id}`); if (raw) saved = { ...saved, ...JSON.parse(raw) }; } catch { /* Ignore invalid saved positions. */ }
+    setActiveNotePopup({ noteId, x: saved.x, y: saved.y, pinned: false });
+    setNoteEditDraft(notes.find(item => item.id === noteId)?.noteText || '');
+  };
+  useEffect(() => {
+    if (!activeNotePopup) return;
+    const move = (event: PointerEvent) => { const drag = popupDragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; const width = Math.min(390, window.innerWidth - 24); const x = Math.max(12, Math.min(window.innerWidth - width - 12, event.clientX - drag.offsetX)); const y = Math.max(12, Math.min(window.innerHeight - 270, event.clientY - drag.offsetY)); setActiveNotePopup(current => current ? { ...current, x, y } : current); window.localStorage.setItem(`pdf-note-popup:${pdfDoc.id}`, JSON.stringify({ x, y })); };
+    const up = () => { popupDragRef.current = null; };
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') setActiveNotePopup(null); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('keydown', key);
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('keydown', key); };
+  }, [activeNotePopup?.noteId, pdfDoc.id]);
+  useEffect(() => { const note = notes.find(item => item.id === activeNotePopup?.noteId); if (note) setNoteEditDraft(note.noteText || ''); }, [activeNotePopup?.noteId]);
+  const saveNoteEdit = async () => { if (activeNotePopup) await db.notes.update(activeNotePopup.noteId, { noteText: noteEditDraft, updatedAt: Date.now() }); };
+  const insertNoteFormatting = (before: string, after = before) => { const area = document.querySelector<HTMLTextAreaElement>('.pdf-note-edit'); if (!area) return; const start = area.selectionStart, end = area.selectionEnd; setNoteEditDraft(noteEditDraft.slice(0,start) + before + noteEditDraft.slice(start,end) + after + noteEditDraft.slice(end)); requestAnimationFrame(() => { area.focus(); area.setSelectionRange(start + before.length, end + before.length); }); };
 
   // Keep the floating actions attached to real text selected in the PDF.js layer.
   useEffect(() => {
@@ -200,9 +232,11 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       const anchor = selection.anchorNode;
       const textLayer = anchor instanceof Element ? anchor.closest('.textLayer') : anchor?.parentElement?.closest('.textLayer');
       if (!textLayer || !root.contains(textLayer)) return;
-      const rect = selection.getRangeAt(0).getBoundingClientRect();
-      const pageElement = textLayer.closest('[data-page-number]');
-      setSelectedText({ text: text.slice(0, 12000), pageNumber: Number(pageElement?.getAttribute('data-page-number') || currentPage), top: rect.top, left: rect.left });
+      const range = selection.getRangeAt(0); const rect = range.getBoundingClientRect();
+      const pageElement = textLayer.closest<HTMLElement>('.page[data-page-number]'); const pageNumber = Number(pageElement?.dataset.pageNumber || currentPage);
+      const viewport = pdfViewerRef.current?.getPageView(pageNumber - 1)?.viewport; const pageRect = pageElement?.getBoundingClientRect();
+      const rects = viewport && pageRect ? Array.from(range.getClientRects()).map(r => { const sx = viewport.width / pageRect.width, sy = viewport.height / pageRect.height; const a = viewport.convertToPdfPoint((r.left-pageRect.left)*sx,(r.top-pageRect.top)*sy); const b = viewport.convertToPdfPoint((r.right-pageRect.left)*sx,(r.bottom-pageRect.top)*sy); return { x: Math.min(a[0],b[0]), y: Math.min(a[1],b[1]), w: Math.abs(b[0]-a[0]), h: Math.abs(b[1]-a[1]) }; }).filter(r => r.w > 0 && r.h > 0) : [];
+      setSelectedText({ text: text.slice(0, 12000), pageNumber, top: rect.top, left: rect.left, rects });
       setSelectionPanel('actions');
     };
     const handleOutsidePointer = (event: PointerEvent) => {
@@ -222,10 +256,11 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const handleSaveSelectedNote = async () => {
     if (!selectedText || !noteDraft.trim()) return;
     const now = Date.now();
-    const note: StudyNote = { id: crypto.randomUUID(), pdfId: pdfDoc.id, pageNumber: selectedText.pageNumber, selectedText: selectedText.text, noteText: noteDraft.trim(), createdAt: now, updatedAt: now };
+    const note: StudyNote = { id: crypto.randomUUID(), pdfId: pdfDoc.id, pageNumber: selectedText.pageNumber, selectedText: selectedText.text, noteText: noteDraft.trim(), highlight: { color: noteColor, rects: selectedText.rects }, createdAt: now, updatedAt: now };
     await db.notes.add(note);
     setNoteDraft('');
     setSelectionPanel(null);
+    openNotePopup(note.id);
     setSelectedText(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -237,10 +272,12 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     setSummary('');
     setSummaryError('');
     try {
-      const response = await fetch('/api/ai/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: selectedText.text, pageNumber: selectedText.pageNumber, documentName: pdfDoc.filename }) });
+      const response = await fetch('/api/ai/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: selectedText.text, pageNumber: selectedText.pageNumber, documentName: pdfDoc.filename, mode: 'explain' }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'The summary could not be generated.');
-      setSummary(typeof data.summary === 'string' ? data.summary : '');
+      const explanation = stripAiFormatting(typeof data.summary === 'string' ? data.summary : ''); setSummary(explanation);
+      const now = Date.now(); const note: StudyNote = { id: crypto.randomUUID(), pdfId: pdfDoc.id, pageNumber: selectedText.pageNumber, selectedText: selectedText.text, noteText: '', aiExplanation: explanation, highlight: { color: noteColor, rects: selectedText.rects }, createdAt: now, updatedAt: now };
+      await db.notes.add(note); setActiveNotePopup({ noteId: note.id, x: Math.max(12, window.innerWidth - 410), y: 112, pinned: false });
     } catch (error) {
       setSummaryError(error instanceof Error ? error.message : 'The summary could not be generated.');
     } finally {
@@ -433,6 +470,27 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   // Viewer is created once for each loaded PDF. Page/mode updates are handled below.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfProxy, handlePageChange]);
+
+  // Paint saved highlights in PDF page coordinates, converting through each live viewport.
+  useEffect(() => {
+    const host = pdfViewerElementRef.current; if (!host || !pdfProxy) return; let frame = 0;
+    const render = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => {
+      host.querySelectorAll('.pdf-note-highlight-layer').forEach(node => node.remove());
+      host.querySelectorAll<HTMLElement>('.page[data-page-number]').forEach(page => {
+        const pageNumber = Number(page.dataset.pageNumber); const pageNotes = notes.filter(note => note.pageNumber === pageNumber && note.highlight?.rects?.length); if (!pageNotes.length) return;
+        const viewport = pdfViewerRef.current?.getPageView(pageNumber - 1)?.viewport; if (!viewport) return;
+        const layer = document.createElement('div'); layer.className = 'pdf-note-highlight-layer'; page.appendChild(layer);
+        pageNotes.forEach(note => note.highlight?.rects.forEach(rect => {
+          const bounds = viewport.convertToViewportRectangle([rect.x,rect.y,rect.x+rect.w,rect.y+rect.h]); const button = document.createElement('button'); button.type='button'; button.className='pdf-note-highlight';
+          button.style.left=`${Math.min(bounds[0],bounds[2])}px`; button.style.top=`${Math.min(bounds[1],bounds[3])}px`; button.style.width=`${Math.max(3,Math.abs(bounds[2]-bounds[0]))}px`; button.style.height=`${Math.max(5,Math.abs(bounds[3]-bounds[1]))}px`; button.style.background=HIGHLIGHT_COLORS[note.highlight?.color || 'yellow']; button.setAttribute('aria-label',`Open note for page ${pageNumber}`); button.title=`Open note · Page ${pageNumber}`;
+          button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openNotePopup(note.id);}); layer.appendChild(button);
+        }));
+      });
+    }); };
+    const bus=pdfEventBusRef.current; bus?.on('pagerendered',render); bus?.on('textlayerrendered',render); bus?.on('scalechanging',render); bus?.on('rotationchanging',render);
+    const observer=new MutationObserver(render); observer.observe(host,{childList:true}); render();
+    return()=>{cancelAnimationFrame(frame);observer.disconnect();bus?.off('pagerendered',render);bus?.off('textlayerrendered',render);bus?.off('scalechanging',render);bus?.off('rotationchanging',render);host.querySelectorAll('.pdf-note-highlight-layer').forEach(node=>node.remove());};
+  }, [notes,pdfProxy,scale,rotation]);
 
   // Keep the built-in PDF.js viewer's scroll mode in sync with the study preference.
   useEffect(() => {
@@ -723,7 +781,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       className="pdf-reader fixed inset-0 z-40 flex flex-col"
     >
       {/* Top Header & Reading Controls */}
-      <header className="pdf-reader-header flex items-center justify-between px-5 py-3 border-b">
+      <header className="pdf-reader-header flex items-center justify-between px-3 py-2 border-b">
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -743,14 +801,14 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         </div>
 
         {/* Study Timer Center Controls */}
-        <div className="pdf-reader-toolbar flex items-center gap-4 px-4 py-1.5 rounded-2xl border">
+        <div className="pdf-reader-toolbar flex items-center gap-2 px-2 py-1 rounded-xl border">
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
                 isTimerRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
               }`}
             />
-            <span className="font-mono text-base font-bold tracking-wider text-slate-900">
+            <span className="font-mono text-sm font-bold tracking-wider text-slate-900">
               {formatTimer(timerSeconds)}
             </span>
           </div>
@@ -778,7 +836,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
               className="pdf-reader-primary flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold text-white transition cursor-pointer"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Resume Timer</span>
+              <span className="hidden sm:inline">Resume</span>
             </button>
           ) : (
             <button
@@ -800,7 +858,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-lime-500 hover:bg-lime-600 disabled:opacity-40 text-slate-900 transition cursor-pointer"
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Finish Now</span>
+            <span>Finish</span>
           </button>
         </div>
 
@@ -860,25 +918,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             </button>
           </div>
 
-          <button type="button" onClick={rotatePdf} className="pdf-reader-control rounded-xl border p-2 text-slate-600 hover:bg-sky-50" aria-label={`Rotate page clockwise, current rotation ${rotation} degrees`} title={`Rotate clockwise (currently ${rotation}°)`}>
-            <RotateCw className="h-4 w-4" />
-          </button>
-          <button type="button" onClick={downloadPdf} className="pdf-reader-control rounded-xl border p-2 text-slate-600 hover:bg-sky-50" aria-label="Download PDF" title="Download PDF">
-            <Download className="h-4 w-4" />
-          </button>
-          <button type="button" onClick={printPdf} className="pdf-reader-control rounded-xl border p-2 text-slate-600 hover:bg-sky-50" aria-label="Open PDF for printing" title="Print PDF">
-            <Printer className="h-4 w-4" />
-          </button>
-          <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800">
-            <button
-              type="button"
-              onClick={handleToggleReadingMode}
-              aria-label={readingMode === 'single' ? 'Switch to Continuous Scrolling' : 'Switch to Single Page'}
-              className="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-100 text-slate-600 cursor-pointer"
-            >
-              {readingMode === 'single' ? 'Single' : 'Scroll'}
-            </button>
-          </div>
+          <div className="relative"><button type="button" onClick={() => setShowMoreTools(open => !open)} className="pdf-reader-control rounded-lg border p-1.5 text-slate-600 hover:bg-sky-50" aria-label="More PDF tools" aria-expanded={showMoreTools} title="More tools"><MoreHorizontal className="h-4 w-4" /></button>{showMoreTools && <div className="pdf-more-tools" role="menu"><button role="menuitem" type="button" onClick={rotatePdf}><RotateCw />Rotate clockwise</button><button role="menuitem" type="button" onClick={downloadPdf}><Download />Download PDF</button><button role="menuitem" type="button" onClick={printPdf}><Printer />Print PDF</button><button role="menuitem" type="button" onClick={handleToggleReadingMode}><BookOpen />{readingMode === 'single' ? 'Continuous scroll' : 'Single page'}</button></div>}</div>
         </div>
       </header>
 
@@ -1005,14 +1045,20 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       {showNotes && <aside className="pdf-notes-panel" aria-label="Saved PDF notes">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><div><h3 className="text-sm font-bold text-slate-900">Your notes</h3><p className="text-[11px] text-slate-500">{notes.length} saved for this PDF</p></div><button type="button" onClick={() => setShowNotes(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close notes"><X className="h-4 w-4" /></button></div>
         <div className="flex-1 space-y-3 overflow-y-auto p-3">
-          {notes.length === 0 ? <div className="py-10 text-center text-xs text-slate-400">No notes yet. Select text and choose Add note.</div> : notes.map(note => <article key={note.id} className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+          {notes.length === 0 ? <div className="py-10 text-center text-xs text-slate-400">No notes yet. Select text and choose Add note.</div> : notes.map(note => <article key={note.id} onClick={() => openNotePopup(note.id)} onKeyDown={event => { if (event.key === 'Enter') openNotePopup(note.id); }} role="button" tabIndex={0} className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm cursor-pointer hover:border-sky-200">
             <div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-wide text-sky-700">Page {note.pageNumber}</span><button type="button" onClick={() => db.notes.delete(note.id)} className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Delete note"><Trash2 className="h-3.5 w-3.5" /></button></div>
-            <p className="mb-2 border-l-2 border-sky-300 pl-2 text-[11px] italic text-slate-500">{note.selectedText}</p><p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-800">{note.noteText}</p>
+            <p className="mb-2 border-l-2 border-sky-300 pl-2 text-[11px] italic text-slate-500">{note.selectedText}</p>{note.aiExplanation && <p className="ai-text whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{stripAiFormatting(note.aiExplanation)}</p>}<p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-800">{note.noteText}</p>
           </article>)}
         </div>
       </aside>}
 
       </div>
+
+      {activeNotePopup && (() => { const note = notes.find(item => item.id === activeNotePopup.noteId); if (!note) return null; return <section className="pdf-note-popup" style={{ left: activeNotePopup.x, top: activeNotePopup.y }} aria-label={`Note for page ${note.pageNumber}`}>
+        <header className="pdf-note-popup-header" onPointerDown={event => { if ((event.target as HTMLElement).closest('button')) return; const box = event.currentTarget.parentElement!.getBoundingClientRect(); popupDragRef.current = { pointerId: event.pointerId, offsetX: event.clientX-box.left, offsetY: event.clientY-box.top }; }}><div><strong>Study note</strong><span>Page {note.pageNumber}</span></div><div className="flex gap-1"><button type="button" onClick={() => setActiveNotePopup(current => current ? { ...current, pinned: !current.pinned } : current)} aria-label="Pin note popup"><Pin className={activeNotePopup.pinned ? 'fill-current' : ''} /></button><button type="button" onClick={() => setActiveNotePopup(null)} aria-label="Close note popup"><X /></button></div></header>
+        <div className="pdf-note-popup-content"><p className="pdf-note-selected">{note.selectedText}</p>{note.aiExplanation && <div className="mb-3"><div className="mb-1 flex justify-between text-[11px] font-bold text-sky-700"><span>AI explanation</span><button type="button" onClick={async () => { const response=await fetch('/api/ai/summarize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:note.selectedText,pageNumber:note.pageNumber,documentName:pdfDoc.filename,mode:'explain'})}); const data=await response.json(); if(response.ok) await db.notes.update(note.id,{aiExplanation:stripAiFormatting(data.summary||''),updatedAt:Date.now()}); else window.alert(data.error||'Could not regenerate explanation.'); }} className="hover:underline">Regenerate</button></div><p className="ai-text whitespace-pre-wrap text-xs leading-relaxed">{stripAiFormatting(note.aiExplanation)}</p></div>}
+        <div className="mb-2 flex gap-1 border-b border-slate-200 pb-2"><button type="button" title="Bold" onClick={() => insertNoteFormatting('**')}><Bold /></button><button type="button" title="Italic" onClick={() => insertNoteFormatting('_')}><Italic /></button><button type="button" title="Underline" onClick={() => insertNoteFormatting('<u>','</u>')}><Underline /></button><button type="button" title="Bullet list" onClick={() => insertNoteFormatting('\n• ','')}><List /></button></div><textarea className="pdf-note-edit" value={noteEditDraft} onChange={event => setNoteEditDraft(event.target.value)} placeholder="Write or edit your note…" rows={4} aria-label="Edit note text" />
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2"><label className="text-[11px]">Highlight <select value={note.highlight?.color || 'yellow'} onChange={event => db.notes.update(note.id,{highlight:{color:event.target.value as any,rects:note.highlight?.rects||[]},updatedAt:Date.now()})} className="ml-1 rounded border p-1"><option value="yellow">Yellow</option><option value="green">Green</option><option value="pink">Pink</option><option value="blue">Blue</option><option value="orange">Orange</option></select></label><div className="flex gap-1"><button type="button" onClick={() => navigator.clipboard?.writeText(`${note.selectedText}\n\n${noteEditDraft}\n\n${note.aiExplanation||''}`)} aria-label="Copy note text"><Copy /></button><button type="button" onClick={() => navigateToPage(note.pageNumber)} aria-label="Jump to page"><BookOpen /></button><button type="button" onClick={saveNoteEdit} className="pdf-note-save">Save</button><button type="button" onClick={async () => { if(window.confirm('Delete this note and its highlight?')) { await db.notes.delete(note.id); setActiveNotePopup(null); } }} aria-label="Delete note"><Trash2 /></button></div></div><p className="mt-2 text-[10px] text-slate-400">Created {new Date(note.createdAt).toLocaleString()} · Updated {new Date(note.updatedAt).toLocaleString()}</p></div></section>; })()}
 
       {searchOpen && (
         <div className="pdf-find-bar" role="search" aria-label="Find in PDF">
@@ -1040,18 +1086,18 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         <div className="pdf-selection-popover" style={{ top: Math.max(12, selectedText.top - 58), left: Math.max(12, Math.min(selectedText.left, window.innerWidth - 290)) }} aria-label="Selected text actions">
           {selectionPanel === 'actions' && <div className="flex items-center gap-1" onMouseDown={event => event.preventDefault()}>
             <button type="button" onClick={() => { setNoteDraft(''); setSelectionPanel('note'); }} className="pdf-selection-action"><StickyNote className="h-4 w-4" /><span>Add note</span></button>
-            <button type="button" onClick={handleSummarizeSelection} className="pdf-selection-action pdf-selection-ai"><Sparkles className="h-4 w-4" /><span>Summarize</span></button>
+            <button type="button" onClick={handleSummarizeSelection} className="pdf-selection-action pdf-selection-ai"><Sparkles className="h-4 w-4" /><span>Explain simply</span></button>
             <button type="button" onClick={() => { setSelectionPanel(null); setSelectedText(null); }} className="pdf-selection-close" aria-label="Hide selection actions" title="Hide"><X className="h-4 w-4" /></button>
           </div>}
           {selectionPanel === 'note' && <div className="w-72 space-y-2">
             <div className="flex items-center justify-between gap-2"><strong className="text-xs">Quick note · Page {selectedText.pageNumber}</strong><button type="button" onClick={() => setSelectionPanel('actions')} aria-label="Back to selection actions"><X className="h-4 w-4" /></button></div>
             <p className="pdf-selection-quote">“{selectedText.text.slice(0, 180)}{selectedText.text.length > 180 ? '…' : ''}”</p>
             <textarea autoFocus rows={3} maxLength={500} value={noteDraft} onChange={event => setNoteDraft(event.target.value)} placeholder="Write a short note about this passage…" className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-800 outline-none focus:border-sky-400" />
-            <div className="flex justify-end"><button type="button" onClick={handleSaveSelectedNote} disabled={!noteDraft.trim()} className="pdf-selection-save"><Save className="h-3.5 w-3.5" /> Save note</button></div>
+            <div className="flex items-center justify-between gap-2"><label className="text-[10px] text-slate-500">Highlight <select value={noteColor} onChange={event => setNoteColor(event.target.value as typeof noteColor)} className="ml-1 rounded border border-slate-200 bg-white p-1 text-[10px]"><option value="yellow">Yellow</option><option value="green">Green</option><option value="pink">Pink</option><option value="blue">Blue</option><option value="orange">Orange</option></select></label><button type="button" onClick={handleSaveSelectedNote} disabled={!noteDraft.trim()} className="pdf-selection-save"><Save className="h-3.5 w-3.5" /> Save note</button></div>
           </div>}
           {selectionPanel === 'summary' && <div className="w-80 max-w-[calc(100vw-48px)] space-y-2">
             <div className="flex items-center justify-between gap-2"><strong className="text-xs flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> AI summary</strong><button type="button" onClick={() => setSelectionPanel('actions')} aria-label="Back to selection actions"><X className="h-4 w-4" /></button></div>
-            {isSummarizing ? <p className="text-xs text-slate-500">Reading the selected passage…</p> : summaryError ? <p className="text-xs text-rose-600">{summaryError}</p> : <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{summary}</p>}
+            {isSummarizing ? <p className="text-xs text-slate-500">Reading the selected passage…</p> : summaryError ? <p className="text-xs text-rose-600">{summaryError}</p> : <p className="ai-text whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{stripAiFormatting(summary)}</p>}
             {!isSummarizing && !summaryError && summary && <button type="button" onClick={() => { setSelectionPanel(null); setSelectedText(null); window.getSelection()?.removeAllRanges(); }} className="pdf-selection-save">Done</button>}
             {summaryError && <button type="button" onClick={handleSummarizeSelection} className="pdf-selection-save">Try again</button>}
           </div>}
