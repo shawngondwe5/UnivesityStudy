@@ -371,3 +371,15 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
   .pdf-reader-toolbar select { max-width: 105px; }
   .pdf-reader-sidebar { width: min(82vw, 240px); }
 }
+
+@media (max-width: 720px) {
+  .pdf-reader-sidebar {
+    position: absolute;
+    z-index: 25;
+    inset: 0 auto 0 0;
+    height: 100%;
+    box-shadow: 12px 0 30px rgba(12, 43, 58, .18);
+  }
+  .pdf-reader-body { isolation: isolate; }
+  .pdf-reader-canvas { width: 100%; }
+}
