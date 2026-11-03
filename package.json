@@ -7,7 +7,7 @@
     "dev": "node server.js",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "start": "node server.js"
   },
