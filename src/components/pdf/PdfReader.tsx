@@ -27,6 +27,64 @@ try {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 }
 
+const PdfPageThumbnail: React.FC<{
+  pdf: pdfjsLib.PDFDocumentProxy;
+  pageNumber: number;
+}> = ({ pdf, pageNumber }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '240px' });
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible || !canvasRef.current) return;
+    let cancelled = false;
+    let renderTask: pdfjsLib.RenderTask | null = null;
+    const render = async () => {
+      try {
+        const page = await pdf.getPage(pageNumber);
+        if (cancelled || !canvasRef.current) return;
+        const base = page.getViewport({ scale: 1 });
+        const scale = Math.min(112 / base.width, 148 / base.height);
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const context = canvas.getContext('2d');
+        if (!context) return;
+        renderTask = page.render({ canvasContext: context, viewport });
+        await renderTask.promise;
+      } catch (error) {
+        if (!cancelled) console.error('Thumbnail render failed:', error);
+      }
+    };
+    render();
+    return () => {
+      cancelled = true;
+      renderTask?.cancel();
+    };
+  }, [pdf, pageNumber, visible]);
+
+  return (
+    <div ref={hostRef} className="pdf-thumbnail-preview">
+      <canvas ref={canvasRef} aria-label={`Preview of page ${pageNumber}`} />
+      {!visible && <div className="pdf-thumbnail-skeleton" />}
+    </div>
+  );
+};
+
 interface PdfReaderProps {
   pdfDoc: PDFDocument;
   courseName: string;
@@ -479,51 +537,51 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     <div
       role="region"
       aria-label="PDF Reader Workspace"
-      className="fixed inset-0 z-40 flex flex-col bg-slate-900 text-slate-100 select-none"
+      className="pdf-reader fixed inset-0 z-40 flex flex-col select-none"
     >
       {/* Top Header & Reading Controls */}
-      <header className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
+      <header className="pdf-reader-header flex items-center justify-between px-5 py-3 border-b">
         <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={handleSafeClose}
             aria-label="Back to course materials"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
+            className="pdf-reader-button flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back</span>
           </button>
           <div>
-            <div className="text-sm font-bold text-white truncate max-w-sm">{pdfDoc.filename}</div>
-            <div className="text-xs text-slate-400">
+            <div className="text-sm font-bold text-slate-900 truncate max-w-sm">{pdfDoc.filename}</div>
+            <div className="text-xs text-slate-500">
               {courseName} &bull; {lectureName}
             </div>
           </div>
         </div>
 
         {/* Study Timer Center Controls */}
-        <div className="flex items-center gap-4 bg-slate-900 px-4 py-1.5 rounded-2xl border border-slate-800">
+        <div className="pdf-reader-toolbar flex items-center gap-4 px-4 py-1.5 rounded-2xl border">
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
-                isTimerRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'
+                isTimerRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
               }`}
             />
-            <span className="font-mono text-base font-bold tracking-wider text-white">
+            <span className="font-mono text-base font-bold tracking-wider text-slate-900">
               {formatTimer(timerSeconds)}
             </span>
           </div>
 
-          <div className="h-4 w-px bg-slate-800" />
+          <div className="h-4 w-px bg-slate-200" />
 
           {/* Mode Selector */}
           <select
             value={sessionMode}
             onChange={e => setSessionMode(e.target.value as SessionType)}
             aria-label="Session reading mode"
-            className="bg-transparent text-xs text-slate-300 font-medium focus:outline-none cursor-pointer"
+            className="bg-transparent text-xs text-slate-700 font-medium focus:outline-none cursor-pointer"
           >
-            <option value="first-time" className="bg-slate-900 text-white">First-time Reading</option>
+            <option value="first-time" className="bg-white text-slate-900">First-time Reading</option>
             <option value="revision" className="bg-slate-900 text-white">Revision Session</option>
           </select>
 
@@ -534,7 +592,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
               type="button"
               onClick={handleStartSession}
               aria-label="Start reading timer"
-              className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition cursor-pointer"
+              className="pdf-reader-primary flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold text-white transition cursor-pointer"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>Resume Timer</span>
@@ -544,7 +602,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
               type="button"
               onClick={handlePauseSession}
               aria-label="Pause reading timer"
-              className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white transition cursor-pointer"
             >
               <Pause className="w-3.5 h-3.5 fill-current" />
               <span>Pause</span>
@@ -556,7 +614,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             onClick={handleFinishNow}
             disabled={visitedPages.length === 0 && timerSeconds === 0}
             aria-label="Finish study session now"
-            className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-lime-500 hover:bg-lime-600 disabled:opacity-40 text-slate-900 transition cursor-pointer"
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>Finish Now</span>
@@ -565,17 +623,17 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
         {/* View Mode & Zoom Controls */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800">
+          <div className="pdf-reader-control flex items-center rounded-xl p-1 border">
             <button
               type="button"
               onClick={() => setScale(s => Math.max(0.6, s - 0.2))}
               aria-label="Zoom out"
-              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 cursor-pointer"
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 cursor-pointer"
               title="Zoom Out"
             >
               <ZoomOut className="w-4 h-4" />
             </button>
-            <span className="text-xs font-mono px-2 text-slate-400">{Math.round(scale * 100)}%</span>
+            <span className="text-xs font-mono px-2 text-slate-500">{Math.round(scale * 100)}%</span>
             <button
               type="button"
               onClick={() => setScale(s => Math.min(2.5, s + 0.2))}
@@ -592,7 +650,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
               type="button"
               onClick={handleToggleReadingMode}
               aria-label={readingMode === 'single' ? 'Switch to Continuous Scrolling' : 'Switch to Single Page'}
-              className="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-800 text-slate-300 cursor-pointer"
+              className="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-100 text-slate-600 cursor-pointer"
             >
               {readingMode === 'single' ? 'Single' : 'Scroll'}
             </button>
@@ -602,7 +660,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
       {/* Inactivity Alert Banner */}
       {showInactivityNotice && (
-        <div className="bg-amber-600 text-white px-4 py-2 text-xs flex items-center justify-between">
+        <div className="bg-amber-500 text-white px-4 py-2 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
             <span>Study timer paused. No activity detected for {settings.inactivityThresholdMinutes} minutes.</span>
@@ -620,12 +678,12 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       {/* Reader Main Body */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel: Page Thumbnails & Navigation */}
-        <aside className="w-56 border-r border-slate-800 bg-slate-950 flex flex-col" aria-label="Page navigation">
-          <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-300">Pages ({totalPages})</span>
-            <span className="text-blue-400 font-mono">{progressPercent}% studied</span>
+        <aside className="pdf-reader-sidebar w-56 border-r flex flex-col" aria-label="Page navigation">
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between text-xs">
+            <span className="font-semibold text-slate-700">Pages ({totalPages})</span>
+            <span className="text-sky-600 font-mono">{progressPercent}% studied</span>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          <div className="pdf-thumbnail-list flex-1 overflow-y-auto p-3 space-y-3">
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNumber => {
               const isStudied = studiedSet.has(pageNumber);
               const isCurrent = currentPage === pageNumber;
@@ -639,32 +697,32 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
                   type="button"
                   aria-label={`Jump to page ${pageNumber}`}
                   onClick={() => navigateToPage(pageNumber)}
-                  className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-left text-xs transition cursor-pointer ${
+                  className={`pdf-thumbnail-card w-full flex flex-col gap-2 p-2 rounded-xl border text-left text-xs transition cursor-pointer ${
                     isCurrent
-                      ? 'border-blue-500 bg-blue-950/40 text-white'
-                      : 'border-slate-800 bg-slate-900/60 hover:bg-slate-800 text-slate-300'
+                      ? 'is-current'
+                      : ''
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-slate-400">{pageNumber}</span>
-                    <span className="truncate">Page {pageNumber}</span>
-                  </div>
+                  {pdfProxy ? <PdfPageThumbnail pdf={pdfProxy} pageNumber={pageNumber} /> : <div className="pdf-thumbnail-preview"><div className="pdf-thumbnail-skeleton" /></div>}
+                  <div className="flex items-center justify-between gap-2 px-1">
+                    <span className="font-semibold text-slate-700">Page {pageNumber}</span>
 
                   {/* Status Indicator */}
-                  <div>
+                  <div className="shrink-0">
                     {isStudied ? (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                         Studied
                       </span>
                     ) : isVisitedCurrent ? (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                         Visited
                       </span>
                     ) : (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500">
                         Unread
                       </span>
                     )}
+                  </div>
                   </div>
                 </button>
               );
@@ -675,13 +733,13 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         {/* Center Panel: PDF Viewer */}
         <main
           ref={mainScrollContainerRef}
-          className="flex-1 overflow-auto bg-slate-900 flex flex-col items-center p-6 relative"
+          className="pdf-reader-canvas flex-1 overflow-auto flex flex-col items-center p-6 relative"
         >
           {readingMode === 'single' ? (
             <div className="flex flex-col items-center pb-20">
               <canvas
                 ref={canvasRef}
-                className="shadow-2xl rounded-sm bg-white border border-slate-700"
+                className="shadow-xl rounded-sm bg-white border border-slate-200"
               />
             </div>
           ) : (
@@ -689,17 +747,17 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
           )}
 
           {/* Floating Bottom Pagination Controls (Always available in both modes) */}
-          <div className="fixed bottom-6 flex items-center gap-4 bg-slate-950/90 backdrop-blur px-5 py-2.5 rounded-full border border-slate-800 shadow-xl z-30">
+          <div className="pdf-reader-pagination fixed bottom-6 flex items-center gap-4 backdrop-blur px-5 py-2.5 rounded-full border shadow-xl z-30">
             <button
               type="button"
               onClick={() => navigateToPage(currentPage - 1)}
               disabled={currentPage <= 1}
               aria-label="Previous page"
-              className="p-1.5 rounded-full hover:bg-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer"
+              className="p-1.5 rounded-full hover:bg-sky-50 text-slate-600 disabled:opacity-30 cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <span className="text-xs font-mono font-medium text-slate-200">
+            <span className="text-xs font-mono font-medium text-slate-700">
               Page {currentPage} of {totalPages}
             </span>
             <button
