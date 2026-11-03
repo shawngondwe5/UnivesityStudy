@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Course, Lecture, PDFDocument, StudySession, AppSettings } from '../types';
+import type { Course, Lecture, PDFDocument, StudySession, AppSettings, StudyNote } from '../types';
 
 export class StudyTrackerDB extends Dexie {
   courses!: Table<Course, string>;
@@ -7,6 +7,7 @@ export class StudyTrackerDB extends Dexie {
   pdfs!: Table<PDFDocument, string>;
   sessions!: Table<StudySession, string>;
   settings!: Table<AppSettings, string>;
+  notes!: Table<StudyNote, string>;
 
   constructor() {
     super('UniversityStudyTrackerDB');
@@ -16,6 +17,14 @@ export class StudyTrackerDB extends Dexie {
       pdfs: 'id, lectureId, courseId, order, isDeleted, lastReadAt',
       sessions: 'id, pdfId, courseId, sessionType, startedAt, dateKey, isUnfinished',
       settings: 'id'
+    });
+    this.version(2).stores({
+      courses: 'id, name, createdAt, isDeleted',
+      lectures: 'id, courseId, order, isDeleted',
+      pdfs: 'id, lectureId, courseId, order, isDeleted, lastReadAt',
+      sessions: 'id, pdfId, courseId, sessionType, startedAt, dateKey, isUnfinished',
+      settings: 'id',
+      notes: 'id, pdfId, pageNumber, createdAt'
     });
   }
 }

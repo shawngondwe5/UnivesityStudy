@@ -43,15 +43,16 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
 
     if (editingCourse) {
-      await db.courses.update(editingCourse.id, { name, description });
+      await db.courses.update(editingCourse.id, { name: trimmedName, description: description.trim() });
     } else {
       const newCourse: Course = {
         id: crypto.randomUUID(),
-        name,
-        description,
+        name: trimmedName,
+        description: description.trim(),
         createdAt: Date.now()
       };
       await db.courses.add(newCourse);
@@ -61,16 +62,13 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
 
   const handleDelete = async () => {
     if (!courseToDelete) return;
-    // Mark course as deleted; lectures and active PDFs soft-deleted, historical sessions preserved
-    await db.courses.update(courseToDelete.id, { isDeleted: true });
-    const relatedLectures = lectures.filter(l => l.courseId === courseToDelete.id);
-    for (const l of relatedLectures) {
-      await db.lectures.update(l.id, { isDeleted: true });
-    }
-    const relatedPdfs = pdfs.filter(p => p.courseId === courseToDelete.id);
-    for (const p of relatedPdfs) {
-      await db.pdfs.update(p.id, { isDeleted: true });
-    }
+    // Apply all soft-deletes atomically so a failed write cannot leave a
+    // course with only some of its lectures or PDFs hidden.
+    await db.transaction('rw', db.courses, db.lectures, db.pdfs, async () => {
+      await db.courses.update(courseToDelete.id, { isDeleted: true });
+      await db.lectures.where('courseId').equals(courseToDelete.id).modify({ isDeleted: true });
+      await db.pdfs.where('courseId').equals(courseToDelete.id).modify({ isDeleted: true });
+    });
     setCourseToDelete(null);
   };
 
