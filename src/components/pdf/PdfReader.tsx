@@ -314,44 +314,53 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     };
   }, [pdfProxy, readingMode, scale]);
 
-  // Automatic Continuous Scroll Tracking
+  // Continuous mode records the page after scrolling settles. This prevents
+  // smooth scrolling and fast flicks from marking every page passed on the way.
   useEffect(() => {
     if (readingMode !== 'continuous' || !pdfProxy || !mainScrollContainerRef.current) return;
 
     const scrollContainer = mainScrollContainerRef.current;
+    let settleTimer: number | null = null;
 
     const handleScroll = () => {
-      const pageElements = scrollContainer.querySelectorAll<HTMLElement>('[data-page-number]');
-      if (pageElements.length === 0) return;
+      if (settleTimer !== null) window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => {
+        const pageElements = scrollContainer.querySelectorAll<HTMLElement>('[data-page-number]');
+        if (pageElements.length === 0) return;
 
-      const containerRect = scrollContainer.getBoundingClientRect();
-      const containerMiddle = containerRect.top + containerRect.height / 2;
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const viewportMiddle = containerRect.top + containerRect.height / 2;
+        let visiblePage = currentPage;
+        let smallestDistance = Infinity;
 
-      let closestPage = currentPage;
-      let minDistance = Infinity;
+        pageElements.forEach(element => {
+          const rect = element.getBoundingClientRect();
+          const distance = viewportMiddle < rect.top
+            ? rect.top - viewportMiddle
+            : viewportMiddle > rect.bottom
+              ? viewportMiddle - rect.bottom
+              : 0;
+          if (distance < smallestDistance) {
+            smallestDistance = distance;
+            visiblePage = Number(element.dataset.pageNumber);
+          }
+        });
 
-      pageElements.forEach(el => {
-        const rect = el.getBoundingClientRect();
-        const dist = Math.abs((rect.top + Math.min(rect.height, containerRect.height) / 2) - containerMiddle);
-        if (dist < minDistance) {
-          minDistance = dist;
-          closestPage = Number(el.getAttribute('data-page-number'));
+        if (visiblePage >= 1 && visiblePage <= totalPages && visiblePage !== currentPage) {
+          setCurrentPage(visiblePage);
+          handlePageChange(visiblePage);
+          if (!isTimerRunning) {
+            setIsTimerRunning(true);
+            setShowInactivityNotice(false);
+          }
         }
-      });
-
-      if (closestPage && closestPage >= 1 && closestPage <= totalPages && closestPage !== currentPage) {
-        setCurrentPage(closestPage);
-        handlePageChange(closestPage);
-        if (!isTimerRunning) {
-          setIsTimerRunning(true);
-          setShowInactivityNotice(false);
-        }
-      }
+      }, 160);
     };
 
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll);
+      if (settleTimer !== null) window.clearTimeout(settleTimer);
     };
   }, [readingMode, pdfProxy, totalPages, currentPage, isTimerRunning, handlePageChange]);
 
@@ -801,7 +810,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
       <ResumePositionModal
         isOpen={showResumeModal}
-        lastPosition={pdfDoc.lastPositionPage}
+        lastPosition={Math.min(Math.max(1, pdfDoc.lastPositionPage || 1), totalPages)}
         earliestUnread={(() => {
           const s = new Set(pdfDoc.studiedPages || []);
           for (let i = 1; i <= totalPages; i++) {
@@ -810,7 +819,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
           return 1;
         })()}
         onResumeLast={() => {
-          navigateToPage(pdfDoc.lastPositionPage);
+          navigateToPage(Math.min(Math.max(1, pdfDoc.lastPositionPage || 1), totalPages));
           setShowResumeModal(false);
         }}
         onResumeEarliest={() => {
