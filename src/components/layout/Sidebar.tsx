@@ -33,7 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`study-sidebar relative flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-all duration-200 ease-in-out z-20 shrink-0 ${
+      className={`study-sidebar floating-sidebar relative flex flex-col transition-all duration-300 ease-in-out z-20 shrink-0 ${
         isCollapsed ? 'w-16 sm:w-20' : 'w-16 sm:w-20 md:w-64'
       }`}
       aria-label="Main Navigation"
