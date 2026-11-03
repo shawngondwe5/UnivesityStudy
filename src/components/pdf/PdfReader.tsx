@@ -173,7 +173,10 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       const selection = window.getSelection();
       const text = selection?.toString().trim() || '';
       if (!selection || selection.isCollapsed || !text) {
-        if (!selectionPanel) setSelectedText(null);
+        if (!selectionPanel || selectionPanel === 'actions') {
+          setSelectedText(null);
+          setSelectionPanel(null);
+        }
         return;
       }
       const anchor = selection.anchorNode;
@@ -911,6 +914,16 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             </button>
           </div>
         </main>
+      {showNotes && <aside className="pdf-notes-panel" aria-label="Saved PDF notes">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><div><h3 className="text-sm font-bold text-slate-900">Your notes</h3><p className="text-[11px] text-slate-500">{notes.length} saved for this PDF</p></div><button type="button" onClick={() => setShowNotes(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close notes"><X className="h-4 w-4" /></button></div>
+        <div className="flex-1 space-y-3 overflow-y-auto p-3">
+          {notes.length === 0 ? <div className="py-10 text-center text-xs text-slate-400">No notes yet. Select text and choose Add note.</div> : notes.map(note => <article key={note.id} className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+            <div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-wide text-sky-700">Page {note.pageNumber}</span><button type="button" onClick={() => db.notes.delete(note.id)} className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Delete note"><Trash2 className="h-3.5 w-3.5" /></button></div>
+            <p className="mb-2 border-l-2 border-sky-300 pl-2 text-[11px] italic text-slate-500">{note.selectedText}</p><p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-800">{note.noteText}</p>
+          </article>)}
+        </div>
+      </aside>}
+
       </div>
 
       {selectedText && selectionPanel && (
@@ -934,16 +947,6 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
           </div>}
         </div>
       )}
-
-      {showNotes && <aside className="pdf-notes-panel" aria-label="Saved PDF notes">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><div><h3 className="text-sm font-bold text-slate-900">Your notes</h3><p className="text-[11px] text-slate-500">{notes.length} saved for this PDF</p></div><button type="button" onClick={() => setShowNotes(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close notes"><X className="h-4 w-4" /></button></div>
-        <div className="flex-1 space-y-3 overflow-y-auto p-3">
-          {notes.length === 0 ? <div className="py-10 text-center text-xs text-slate-400">No notes yet. Select text and choose Add note.</div> : notes.map(note => <article key={note.id} className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
-            <div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-wide text-sky-700">Page {note.pageNumber}</span><button type="button" onClick={() => db.notes.delete(note.id)} className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Delete note"><Trash2 className="h-3.5 w-3.5" /></button></div>
-            <p className="mb-2 border-l-2 border-sky-300 pl-2 text-[11px] italic text-slate-500">{note.selectedText}</p><p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-800">{note.noteText}</p>
-          </article>)}
-        </div>
-      </aside>}
 
       {/* Modals */}
       <FinishReviewModal
