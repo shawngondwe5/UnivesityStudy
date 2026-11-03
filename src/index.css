@@ -568,3 +568,58 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
   .pdf-selection-popover { left: 12px !important; right: 12px; width: auto; }
   .pdf-notes-panel { width: min(92vw, 340px); }
 }
+
+
+/* PDF.js's maintained viewer owns the page lifecycle, text layer and render queue. */
+.pdf-reader-canvas { position: relative; min-height: 0; overflow: hidden; }
+.pdfjs-viewer-container {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  outline: none;
+  background: #edf4f7;
+  scrollbar-gutter: stable;
+}
+.pdfjs-viewer-container .pdfViewer {
+  padding: 24px 0 112px;
+}
+.pdfjs-viewer-container .pdfViewer .page {
+  margin: 0 auto 18px;
+  border: 0;
+  border-radius: 3px;
+  box-shadow: 0 12px 28px rgba(20, 45, 60, .14);
+}
+.pdfjs-viewer-container .pdfViewer .textLayer {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+.pdfjs-viewer-container .pdfViewer .textLayer ::selection {
+  background: rgba(8, 127, 189, .30);
+}
+.pdfjs-viewer-container .pdfViewer .canvasWrapper {
+  overflow: hidden;
+}
+.pdf-find-bar {
+  position: fixed;
+  z-index: 65;
+  top: 78px;
+  right: 22px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: min(440px, calc(100vw - 32px));
+  padding: 9px 10px;
+  border: 1px solid #dce8ef;
+  border-radius: 14px;
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 14px 38px rgba(18, 62, 82, .18);
+  backdrop-filter: blur(16px);
+}
+.pdf-find-bar input { min-width: 0; }
+.pdf-find-bar button { flex: 0 0 auto; }
+@media (max-width: 720px) {
+  .pdfjs-viewer-container .pdfViewer { padding: 14px 8px 108px; }
+  .pdf-find-bar { top: 116px; right: 10px; width: calc(100vw - 20px); }
+}
