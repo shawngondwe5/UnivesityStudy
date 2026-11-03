@@ -30,7 +30,7 @@ async function removeGeneratedSampleData(): Promise<void> {
   const generatedPdfIds = new Set<string>();
 
   for (const pdf of allPdfs) {
-    if (!pdf.blob || typeof pdf.blob.text !== 'function') continue;
+    if (!pdf.blob || pdf.blob.size > 100_000 || typeof pdf.blob.text !== 'function') continue;
     try {
       const contents = await pdf.blob.text();
       if (
@@ -93,7 +93,6 @@ export async function initializeDatabase(): Promise<AppSettings> {
 
   initPromise = (async () => {
     await db.open();
-    await removeGeneratedSampleData();
 
     let settings = await db.settings.get('user-settings');
     if (!settings) {
