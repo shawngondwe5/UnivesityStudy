@@ -35,7 +35,7 @@ export class StudyTrackerDB extends Dexie {
 
 export const db = new StudyTrackerDB();
 
-// Initialize default settings and seed demo course if empty
+// Initialize default settings without inserting demo courses or study history.
 let initPromise: Promise<AppSettings> | null = null;
 
 export async function initializeDatabase(): Promise<AppSettings> {
