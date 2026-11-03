@@ -11,7 +11,9 @@ import {
   Play,
   Pause,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import type { PDFDocument, StudySession, SessionType, AppSettings } from '../../types';
 import { db } from '../../db';
@@ -107,6 +109,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const [totalPages, setTotalPages] = useState<number>(pdfDoc.totalPages || 1);
   const [scale, setScale] = useState<number>(1.2);
   const [readingMode, setReadingMode] = useState<'single' | 'continuous'>(settings.defaultReadingMode || 'single');
+  const [isPagePanelOpen, setIsPagePanelOpen] = useState(true);
 
   // Document progress state (in-memory sync with IndexedDB)
   const [studiedPages, setStudiedPages] = useState<number[]>(pdfDoc.studiedPages || []);
@@ -151,18 +154,17 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         if (!isCancelled) {
           setPdfProxy(proxy);
           setTotalPages(proxy.numPages);
+          const savedPosition = Math.min(Math.max(1, pdfDoc.lastPositionPage || 1), proxy.numPages);
+          setCurrentPage(savedPosition);
+          setVisitedPages([savedPosition]);
 
-          // Check if there is an unread page earlier than last position
-          const studiedSet = new Set(pdfDoc.studiedPages || []);
-          let earliest = 1;
-          for (let p = 1; p <= proxy.numPages; p++) {
-            if (!studiedSet.has(p)) {
-              earliest = p;
-              break;
-            }
-          }
-
-          if (pdfDoc.lastPositionPage > 1 && earliest !== pdfDoc.lastPositionPage) {
+          // Offer a choice only when there is a valid saved position and an
+          // actual unread page to return to. Do not treat a fully studied PDF
+          // as if page 1 were unread.
+          const studiedSet = new Set((pdfDoc.studiedPages || []).filter(p => p >= 1 && p <= proxy.numPages));
+          const earliestUnread = Array.from({ length: proxy.numPages }, (_, i) => i + 1)
+            .find(page => !studiedSet.has(page));
+          if (savedPosition > 1 && earliestUnread !== undefined && earliestUnread !== savedPosition) {
             setShowResumeModal(true);
           }
         }
@@ -323,14 +325,14 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       if (pageElements.length === 0) return;
 
       const containerRect = scrollContainer.getBoundingClientRect();
-      const containerMiddle = containerRect.top + containerRect.height / 3;
+      const containerMiddle = containerRect.top + containerRect.height / 2;
 
       let closestPage = currentPage;
       let minDistance = Infinity;
 
       pageElements.forEach(el => {
         const rect = el.getBoundingClientRect();
-        const dist = Math.abs(rect.top - containerMiddle);
+        const dist = Math.abs((rect.top + Math.min(rect.height, containerRect.height) / 2) - containerMiddle);
         if (dist < minDistance) {
           minDistance = dist;
           closestPage = Number(el.getAttribute('data-page-number'));
@@ -623,6 +625,17 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
         {/* View Mode & Zoom Controls */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsPagePanelOpen(open => !open)}
+            aria-label={isPagePanelOpen ? 'Hide page thumbnails' : 'Show page thumbnails'}
+            aria-expanded={isPagePanelOpen}
+            className="pdf-reader-control flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-sky-50"
+            title={isPagePanelOpen ? 'Hide page panel' : 'Show page panel'}
+          >
+            {isPagePanelOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+            <span className="hidden sm:inline">{isPagePanelOpen ? 'Hide pages' : 'Show pages'}</span>
+          </button>
           <div className="pdf-reader-control flex items-center rounded-xl p-1 border">
             <button
               type="button"
@@ -676,9 +689,10 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       )}
 
       {/* Reader Main Body */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="pdf-reader-body relative flex flex-1 overflow-hidden">
         {/* Left Panel: Page Thumbnails & Navigation */}
-        <aside className="pdf-reader-sidebar w-56 border-r flex flex-col" aria-label="Page navigation">
+        {isPagePanelOpen && (
+        <aside className="pdf-reader-sidebar w-56 shrink-0 border-r flex flex-col" aria-label="Page navigation">
           <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between text-xs">
             <span className="font-semibold text-slate-700">Pages ({totalPages})</span>
             <span className="text-sky-600 font-mono">{progressPercent}% studied</span>
@@ -687,7 +701,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNumber => {
               const isStudied = studiedSet.has(pageNumber);
               const isCurrent = currentPage === pageNumber;
-              const isVisitedCurrent = visitedPages.includes(pageNumber);
+              const isVisited = visitedPages.includes(pageNumber);
 
               return (
                 <button
@@ -713,7 +727,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
                       <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                         Studied
                       </span>
-                    ) : isVisitedCurrent ? (
+                    ) : isVisited ? (
                       <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                         Visited
                       </span>
@@ -729,17 +743,18 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
             })}
           </div>
         </aside>
+        )}
 
         {/* Center Panel: PDF Viewer */}
         <main
           ref={mainScrollContainerRef}
-          className="pdf-reader-canvas flex-1 overflow-auto flex flex-col items-center p-6 relative"
+          className="pdf-reader-canvas min-w-0 flex-1 overflow-auto flex flex-col items-center p-6 relative"
         >
           {readingMode === 'single' ? (
             <div className="flex flex-col items-center pb-20">
               <canvas
                 ref={canvasRef}
-                className="shadow-xl rounded-sm bg-white border border-slate-200"
+                className="pdf-reader-page-canvas max-w-full shadow-xl rounded-sm bg-white border border-slate-200"
               />
             </div>
           ) : (
