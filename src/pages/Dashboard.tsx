@@ -47,15 +47,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ courses, lectures, pdfs, s
 
   return (
     <div className="space-y-7 max-w-7xl mx-auto analytics-page">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 analytics-enter">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600 dark:text-blue-400 mb-2">Your learning space</p>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Academic Overview</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{today}</p>
+      <header className="dashboard-hero analytics-enter">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-end justify-between gap-6">
+          <div>
+            <p className="hero-kicker mb-3">Your learning space · {today}</p>
+            <h1>Build a stronger study rhythm <span className="hero-highlight">one session at a time.</span></h1>
+            <p className="hero-date mt-3 max-w-lg">A clear view of your progress, your consistency, and the work still ahead.</p>
+            <div className="flex flex-wrap items-center gap-3 mt-6">
+              <button type="button" onClick={onCreateCourse} className="hero-cta">Add a course <Plus className="w-4 h-4" /></button>
+              <button type="button" onClick={() => onNavigate('reports')} className="hero-secondary">Explore reports</button>
+            </div>
+          </div>
+          <div className="hidden sm:flex flex-col gap-2 min-w-[145px] rounded-2xl border border-white/20 bg-white/10 backdrop-blur-sm p-4">
+            <span className="text-[10px] uppercase tracking-[.16em] text-white/70">Confirmed pages</span>
+            <strong className="font-[Manrope] text-3xl font-extrabold text-white">{overall.studiedPages.toLocaleString()}</strong>
+            <span className="text-[10px] text-white/70">Your learning adds up.</span>
+          </div>
         </div>
-        <button type="button" onClick={onCreateCourse} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm transition-all hover:-translate-y-0.5">
-          <Plus className="w-4 h-4" /> New Course
-        </button>
       </header>
 
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 analytics-stagger">
