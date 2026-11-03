@@ -55,6 +55,7 @@ try {
 
 const stripAiFormatting = (value: string) => value.replace(/```[\s\S]*?```/g, block => block.replace(/^```[^\n]*\n?|```$/g, '')).replace(/\*\*(.*?)\*\*/g, '$1').replace(/__(.*?)__/g, '$1').replace(/^\s{0,3}#{1,6}\s+/gm, '').replace(/^\s*\*\s+/gm, '• ').replace(/^\s*-\s+/gm, '• ').trim();
 const HIGHLIGHT_COLORS: Record<string, string> = { yellow: 'rgba(255,214,10,.48)', green: 'rgba(52,211,153,.42)', pink: 'rgba(244,114,182,.40)', blue: 'rgba(96,165,250,.42)', orange: 'rgba(249,115,22,.48)' };
+const NOTE_CARD_COLORS: Record<string, string> = { yellow: '#fff2b8', green: '#d8f5df', pink: '#fbe0ed', blue: '#dcecff', orange: '#ffe3c7' };
 
 const PdfPageThumbnail: React.FC<{
   pdf: pdfjsLib.PDFDocumentProxy;
@@ -234,6 +235,39 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); window.removeEventListener('keydown', key); document.removeEventListener('pointerdown', outside); };
   }, [activeNotePopup?.noteId, activeNotePopup?.pinned, pdfDoc.id]);
   useEffect(() => { const note = notes.find(item => item.id === activeNotePopup?.noteId); if (note) setNoteEditDraft(note.noteText || ''); }, [activeNotePopup?.noteId, notes]);
+
+  // Keep the connector attached to the saved PDF-space highlight while the
+  // page, viewer, or card moves. Only one card can be open at a time.
+  useEffect(() => {
+    if (!activeNotePopup) { setNotePopupConnector(null); return; }
+    let frame = 0;
+    const update = () => {
+      const note = notes.find(item => item.id === activeNotePopup.noteId);
+      const page = note && pdfViewerElementRef.current?.querySelector<HTMLElement>(`.page[data-page-number="${note.pageNumber}"]`);
+      const viewport = note && pdfViewerRef.current?.getPageView(note.pageNumber - 1)?.viewport;
+      const pageRect = page?.getBoundingClientRect();
+      const cardRect = notePopupRef.current?.getBoundingClientRect();
+      const viewerRect = mainScrollContainerRef.current?.getBoundingClientRect();
+      const firstRect = note?.highlight?.rects?.[0];
+      if (!pageRect || !viewport || !cardRect || !viewerRect || !firstRect) { setNotePopupConnector(null); return; }
+      const bounds = viewport.convertToViewportRectangle([firstRect.x, firstRect.y, firstRect.x + firstRect.w, firstRect.y + firstRect.h]);
+      const rawX = pageRect.left + (bounds[0] + bounds[2]) / 2;
+      const rawY = pageRect.top + (bounds[1] + bounds[3]) / 2;
+      const x2 = Math.max(viewerRect.left, Math.min(viewerRect.right, rawX));
+      const y2 = Math.max(viewerRect.top, Math.min(viewerRect.bottom, rawY));
+      const candidates = [
+        { x: cardRect.left, y: Math.max(cardRect.top + 18, Math.min(cardRect.bottom - 18, y2)) },
+        { x: cardRect.right, y: Math.max(cardRect.top + 18, Math.min(cardRect.bottom - 18, y2)) },
+        { x: Math.max(cardRect.left + 18, Math.min(cardRect.right - 18, x2)), y: cardRect.top },
+        { x: Math.max(cardRect.left + 18, Math.min(cardRect.right - 18, x2)), y: cardRect.bottom }
+      ];
+      const start = candidates.reduce((best, point) => Math.hypot(point.x - x2, point.y - y2) < Math.hypot(best.x - x2, best.y - y2) ? point : best);
+      setNotePopupConnector(previous => previous && Math.abs(previous.x1-start.x)<1 && Math.abs(previous.y1-start.y)<1 && Math.abs(previous.x2-x2)<1 && Math.abs(previous.y2-y2)<1 ? previous : { x1:start.x, y1:start.y, x2, y2 });
+    };
+    const tick = () => { update(); frame = requestAnimationFrame(tick); };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [activeNotePopup?.noteId, activeNotePopup?.x, activeNotePopup?.y, activeNotePopup?.width, activeNotePopup?.height, notes, scale, rotation, readingMode]);
   const saveNoteEdit = async () => { if (activeNotePopup) { await db.notes.update(activeNotePopup.noteId, { noteText: noteEditDraft, updatedAt: Date.now() }); setNotePopupMode('info'); } };
   const cancelNoteEdit = () => { const note = notes.find(item => item.id === activeNotePopup?.noteId); setNoteEditDraft(note?.noteText || ''); setNotePopupMode('info'); };
   const explainNote = async (note: StudyNote) => {
@@ -1085,11 +1119,66 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
       </div>
 
-      {activeNotePopup && (() => { const note = notes.find(item => item.id === activeNotePopup.noteId); if (!note) return null; return <section className="pdf-note-popup" style={{ left: activeNotePopup.x, top: activeNotePopup.y }} aria-label={`Note for page ${note.pageNumber}`}>
-        <header className="pdf-note-popup-header" onPointerDown={event => { if ((event.target as HTMLElement).closest('button')) return; const box = event.currentTarget.parentElement!.getBoundingClientRect(); popupDragRef.current = { pointerId: event.pointerId, offsetX: event.clientX-box.left, offsetY: event.clientY-box.top }; }}><div><strong>Study note</strong><span>Page {note.pageNumber}</span></div><div className="flex gap-1"><button type="button" onClick={() => setActiveNotePopup(current => current ? { ...current, pinned: !current.pinned } : current)} aria-label="Pin note popup"><Pin className={activeNotePopup.pinned ? 'fill-current' : ''} /></button><button type="button" onClick={() => setActiveNotePopup(null)} aria-label="Close note popup"><X /></button></div></header>
-        <div className="pdf-note-popup-content"><p className="pdf-note-selected">{note.selectedText}</p>{note.aiExplanation && <div className="mb-3"><div className="mb-1 flex justify-between text-[11px] font-bold text-sky-700"><span>AI explanation</span><button type="button" onClick={async () => { const response=await fetch('/api/ai/summarize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:note.selectedText,pageNumber:note.pageNumber,documentName:pdfDoc.filename,mode:'explain'})}); const data=await response.json(); if(response.ok) await db.notes.update(note.id,{aiExplanation:stripAiFormatting(data.summary||''),updatedAt:Date.now()}); else window.alert(data.error||'Could not regenerate explanation.'); }} className="hover:underline">Regenerate</button></div><p className="ai-text whitespace-pre-wrap text-xs leading-relaxed">{stripAiFormatting(note.aiExplanation)}</p></div>}
-        <div className="mb-2 flex gap-1 border-b border-slate-200 pb-2"><button type="button" title="Bold" onClick={() => insertNoteFormatting('**')}><Bold /></button><button type="button" title="Italic" onClick={() => insertNoteFormatting('_')}><Italic /></button><button type="button" title="Underline" onClick={() => insertNoteFormatting('<u>','</u>')}><Underline /></button><button type="button" title="Bullet list" onClick={() => insertNoteFormatting('\n• ','')}><List /></button></div><textarea className="pdf-note-edit" value={noteEditDraft} onChange={event => setNoteEditDraft(event.target.value)} placeholder="Write or edit your note…" rows={4} aria-label="Edit note text" />
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2"><label className="text-[11px]">Highlight <select value={note.highlight?.color || 'yellow'} onChange={event => db.notes.update(note.id,{highlight:{color:event.target.value as any,rects:note.highlight?.rects||[]},updatedAt:Date.now()})} className="ml-1 rounded border p-1"><option value="yellow">Yellow</option><option value="green">Green</option><option value="pink">Pink</option><option value="blue">Blue</option><option value="orange">Orange</option></select></label><div className="flex gap-1"><button type="button" onClick={() => navigator.clipboard?.writeText(`${note.selectedText}\n\n${noteEditDraft}\n\n${note.aiExplanation||''}`)} aria-label="Copy note text"><Copy /></button><button type="button" onClick={() => navigateToPage(note.pageNumber)} aria-label="Jump to page"><BookOpen /></button><button type="button" onClick={saveNoteEdit} className="pdf-note-save">Save</button><button type="button" onClick={async () => { if(window.confirm('Delete this note and its highlight?')) { await db.notes.delete(note.id); setActiveNotePopup(null); } }} aria-label="Delete note"><Trash2 /></button></div></div><p className="mt-2 text-[10px] text-slate-400">Created {new Date(note.createdAt).toLocaleString()} · Updated {new Date(note.updatedAt).toLocaleString()}</p></div></section>; })()}
+      {notePopupConnector && activeNotePopup && <svg className="pdf-note-connector" aria-hidden="true" viewBox={`0 0 ${window.innerWidth} ${window.innerHeight}`}><path d={`M ${notePopupConnector.x1} ${notePopupConnector.y1} Q ${(notePopupConnector.x1+notePopupConnector.x2)/2} ${(notePopupConnector.y1+notePopupConnector.y2)/2-24} ${notePopupConnector.x2} ${notePopupConnector.y2}`} /><circle cx={notePopupConnector.x2} cy={notePopupConnector.y2} r="4" /></svg>}
+      {activeNotePopup && (() => {
+        const note = notes.find(item => item.id === activeNotePopup.noteId);
+        if (!note) return null;
+        const color = note.highlight?.color || 'yellow';
+        const cardColor = NOTE_CARD_COLORS[color] || NOTE_CARD_COLORS.yellow;
+        const beginDrag = (event: React.PointerEvent<HTMLElement>) => {
+          if ((event.target as HTMLElement).closest('button')) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          const rect = event.currentTarget.parentElement!.getBoundingClientRect();
+          popupDragRef.current = { pointerId:event.pointerId, mode:'move', offsetX:event.clientX-rect.left, offsetY:event.clientY-rect.top, startX:event.clientX, startY:event.clientY, startWidth:rect.width, startHeight:rect.height };
+        };
+        return <section ref={notePopupRef} className="pdf-note-popup" style={{ left:activeNotePopup.x, top:activeNotePopup.y, width:activeNotePopup.width, height:activeNotePopup.height, background:cardColor, color:'#26333a', borderColor:'rgba(35,55,65,.16)' }} aria-label={`Note for page ${note.pageNumber}`}>
+          <header className="pdf-note-popup-header" onPointerDown={beginDrag}>
+            <div><strong>Study note</strong><span>Page {note.pageNumber} · {notePopupMode === 'edit' ? 'Editing' : 'Saved note'}</span></div>
+            <div className="flex gap-1">
+              <button type="button" onClick={() => setActiveNotePopup(current => current ? {...current,pinned:!current.pinned} : current)} aria-label="Pin note card" title="Pin note"><Pin className={activeNotePopup.pinned ? 'fill-current' : ''} /></button>
+              <button type="button" onClick={() => setActiveNotePopup(null)} aria-label="Close note card" title="Close"><X /></button>
+            </div>
+          </header>
+          <div className="pdf-note-popup-content">
+            <p className="pdf-note-selected">{note.selectedText}</p>
+            {notePopupMode === 'info' ? <>
+              {note.noteText && <div className="pdf-note-body whitespace-pre-wrap">{note.noteText}</div>}
+              {note.aiExplanation && <section className="pdf-note-ai"><strong>AI explanation</strong><p className="ai-text whitespace-pre-wrap">{stripAiFormatting(note.aiExplanation)}</p></section>}
+              {!note.noteText && !note.aiExplanation && <p className="text-xs opacity-70">No note text has been added yet.</p>}
+              <div className="pdf-note-meta">Page {note.pageNumber}<br />Created {new Date(note.createdAt).toLocaleString()}<br />Updated {new Date(note.updatedAt).toLocaleString()}</div>
+              <div className="pdf-note-actions">
+                <button type="button" onClick={() => navigator.clipboard?.writeText([note.selectedText,note.noteText,note.aiExplanation].filter(Boolean).join('\n\n'))} aria-label="Copy note" title="Copy"><Copy />Copy</button>
+                <button type="button" onClick={() => navigateToPage(note.pageNumber)} aria-label="Go to page" title="Go to page"><BookOpen />Go to page</button>
+                <button type="button" onClick={() => { setNoteEditDraft(note.noteText || ''); setNotePopupMode('edit'); }} aria-label="Edit note"><Bold />Edit</button>
+                <button type="button" onClick={async () => { if(window.confirm('Delete this note and its highlight?')) { await db.notes.delete(note.id); setActiveNotePopup(null); } }} aria-label="Delete note"><Trash2 />Delete</button>
+              </div>
+            </> : <>
+              <label className="pdf-note-field-label" htmlFor="pdf-note-edit">Your note</label>
+              <div className="pdf-note-formatting">
+                <button type="button" title="Bold" aria-label="Bold" onClick={() => insertNoteFormatting('**')}><Bold /></button>
+                <button type="button" title="Italic" aria-label="Italic" onClick={() => insertNoteFormatting('_')}><Italic /></button>
+                <button type="button" title="Underline" aria-label="Underline" onClick={() => insertNoteFormatting('<u>','</u>')}><Underline /></button>
+                <button type="button" title="Bullet list" aria-label="Bullet list" onClick={() => insertNoteFormatting('\n• ','')}><List /></button>
+              </div>
+              <textarea id="pdf-note-edit" className="pdf-note-edit" value={noteEditDraft} onChange={event => setNoteEditDraft(event.target.value)} placeholder="Write a note about this passage…" rows={5} aria-label="Edit note text" />
+              <div className="pdf-note-edit-options">
+                <label>Highlight colour
+                  <select value={color} onChange={event => db.notes.update(note.id,{highlight:{color:event.target.value as any,rects:note.highlight?.rects||[]},updatedAt:Date.now()})}>
+                    <option value="yellow">Yellow</option><option value="green">Green</option><option value="pink">Pink</option><option value="blue">Blue</option><option value="orange">Orange</option>
+                  </select>
+                </label>
+                <button type="button" onClick={() => explainNote(note)} className="pdf-note-explain"><Sparkles />Explain simply</button>
+              </div>
+              {note.aiExplanation && <section className="pdf-note-ai"><strong>AI explanation</strong><p className="ai-text whitespace-pre-wrap">{stripAiFormatting(note.aiExplanation)}</p></section>}
+              <div className="pdf-note-actions">
+                <button type="button" onClick={cancelNoteEdit}>Cancel</button>
+                <button type="button" className="pdf-note-save" onClick={saveNoteEdit}>Save</button>
+              </div>
+            </>}
+          </div>
+          <button type="button" className="pdf-note-resize" aria-label="Resize note card" title="Resize card" onPointerDown={event => { event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); popupDragRef.current = { pointerId:event.pointerId, mode:'resize', offsetX:0, offsetY:0, startX:event.clientX, startY:event.clientY, startWidth:activeNotePopup.width, startHeight:activeNotePopup.height }; }} />
+        </section>;
+      })()}
 
       {searchOpen && (
         <div className="pdf-find-bar" role="search" aria-label="Find in PDF">
