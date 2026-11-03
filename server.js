@@ -49,7 +49,7 @@ app.post('/api/ai/summarize', async (req, res) => {
       : 'Summarize the selected passage in very simple, everyday English. Be brief: use no more than 3 short bullet points and stay under 70 words. Include only the most important ideas. Do not add facts, examples, background information, introductions, or repeated points. Preserve the original meaning.';
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `You are a clear, careful university study assistant. ${instruction}\n\nDocument: ${documentName}\nPage: ${pageNumber ?? 'unknown'}\n\nSelected passage:\n${selectedText}`
+      contents: `You are a clear, careful university study assistant. ${instruction}\n\nDocument: ${documentName}\nPage: ${pageNumber ?? 'unknown'}\n\nSurrounding page context (use only when relevant):\n${context || '(not available)'}\n\nSelected text:\n${selectedText}`
     });
     const summary = response.text?.trim();
     if (!summary) return res.status(502).json({ error: 'The AI returned an empty summary. Please try again.' });
