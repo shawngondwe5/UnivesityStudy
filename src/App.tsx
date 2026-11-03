@@ -138,22 +138,10 @@ export const App: React.FC = () => {
           onClose={() => setActivePdfState(null)}
           onPageChange={newPage => {
             setActivePdfState(prev => {
-              if (!prev) return null;
-              if (
-                prev.pdf.lastPositionPage === newPage &&
-                prev.pdf.studiedPages?.includes(newPage)
-              ) {
-                return prev;
-              }
-              const set = new Set(prev.pdf.studiedPages || []);
-              set.add(newPage);
+              if (!prev || prev.pdf.lastPositionPage === newPage) return prev;
               return {
                 ...prev,
-                pdf: {
-                  ...prev.pdf,
-                  lastPositionPage: newPage,
-                  studiedPages: Array.from(set).sort((a, b) => a - b)
-                }
+                pdf: { ...prev.pdf, lastPositionPage: newPage }
               };
             });
           }}
