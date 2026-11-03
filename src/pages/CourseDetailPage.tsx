@@ -160,7 +160,7 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
 
       {/* Course Progress & Aggregate Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="course-overview-stat p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="text-xs text-slate-500 font-medium">Course Progress</div>
           <div className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1 font-mono">
             {courseProgress}%
@@ -248,7 +248,7 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
             return (
               <div
                 key={lecture.id}
-                className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
+                className="lecture-library-card rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
               >
                 {/* Lecture Bar */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 bg-slate-50/70 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
@@ -296,7 +296,7 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
                         return (
                           <div
                             key={pdf.id}
-                            className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition"
+                            className="pdf-library-card p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition"
                           >
                             <div>
                               <div className="flex items-start justify-between gap-2">
@@ -343,7 +343,7 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
                                 type="button"
                                 onClick={() => onOpenPdf(pdf, course.name, lecture.name)}
                                 aria-label={`Open PDF ${pdf.filename}`}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition cursor-pointer"
+                                className="pdf-open-action flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition cursor-pointer"
                               >
                                 <Play className="w-3.5 h-3.5 fill-current" />
                                 <span>Open PDF</span>
