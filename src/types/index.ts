@@ -74,6 +74,7 @@ export interface StudyNote {
   pdfId: string;
   pageNumber: number;
   selectedText: string;
+  contextText?: string;
   noteText: string;
   aiExplanation?: string;
   highlight?: StudyNoteHighlight;
