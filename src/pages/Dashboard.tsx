@@ -26,7 +26,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ courses, lectures, pdfs, s
   const revisionSeconds = completedSessions.filter(session => session.sessionType === 'revision').reduce((sum, session) => sum + session.durationSeconds, 0);
   const now = new Date();
   const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7) - 6);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
   const weekData = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + index);
