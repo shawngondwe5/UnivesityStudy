@@ -7,8 +7,7 @@ import {
   FileText,
   Upload,
   Trash2,
-  Play,
-  Sparkles
+  Play
 } from 'lucide-react';
 import type { Course, Lecture, PDFDocument } from '../types';
 import { db } from '../db';
@@ -18,7 +17,6 @@ import {
   calculatePdfProgress,
   formatDuration
 } from '../utils/calculations';
-import { createSamplePdfBlob } from '../utils/samplePdf';
 import { ConfirmDialog } from '../components/layout/ConfirmDialog';
 
 interface CourseDetailPageProps {
@@ -115,26 +113,6 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
       alert('This file could not be opened as a valid PDF. Please choose another PDF.');
       e.target.value = '';
     }
-  };
-
-  // Add instant sample PDF for offline testing
-  const handleAddSamplePdf = async (lectureId: string, lectureName: string) => {
-    const sampleBlob = createSamplePdfBlob(lectureName, course.name, 8);
-    const newPdf: PDFDocument = {
-      id: crypto.randomUUID(),
-      lectureId,
-      courseId: course.id,
-      filename: `${lectureName.replace(/[^a-zA-Z0-9]/g, '_')}_Study_Document.pdf`,
-      blob: sampleBlob,
-      totalPages: 8,
-      studiedPages: [],
-      lastPositionPage: 1,
-      order: activePdfs.filter(p => p.lectureId === lectureId).length + 1,
-      uploadedAt: Date.now(),
-      totalFirstTimeTime: 0,
-      totalRevisionTime: 0
-    };
-    await db.pdfs.add(newPdf);
   };
 
   const handleDeletePdf = async () => {
@@ -300,16 +278,6 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
                       />
                     </label>
 
-                    <button
-                      type="button"
-                      onClick={() => handleAddSamplePdf(lecture.id, lecture.name)}
-                      title="Add offline academic test PDF"
-                      aria-label={`Add sample PDF to ${lecture.name}`}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Sample PDF</span>
-                    </button>
                   </div>
                 </div>
 
@@ -317,7 +285,7 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
                 <div className="p-6">
                   {lecturePdfs.length === 0 ? (
                     <div className="text-center py-6 text-xs text-slate-400">
-                      No documents in this lecture. Upload a PDF or add a sample document.
+                      No documents in this lecture yet. Upload your lecture PDF to begin tracking real study progress.
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

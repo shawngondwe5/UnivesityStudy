@@ -30,7 +30,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ sessions, courses }) =
   const totalSeconds = weekSessions.reduce((sum, session) => sum + session.durationSeconds, 0);
   const firstTimeSeconds = weekSessions.filter(session => session.sessionType === 'first-time').reduce((sum, session) => sum + session.durationSeconds, 0);
   const revisionSeconds = weekSessions.filter(session => session.sessionType === 'revision').reduce((sum, session) => sum + session.durationSeconds, 0);
-  const pagesStudied = weekSessions.reduce((sum, session) => sum + (session.confirmedPages?.length ?? 0), 0);
+  const pagesStudied = new Set(
+    weekSessions.flatMap(session => (session.confirmedPages ?? []).map(page => `${session.pdfId}:${page}`))
+  ).size;
   const dailyData = weekDays.map(day => {
     const daySessions = weekSessions.filter(session => session.dateKey === day.key);
     return {

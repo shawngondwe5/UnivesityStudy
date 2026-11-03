@@ -60,4 +60,5 @@ export interface AppSettings {
   inactivityThresholdMinutes: number;
   streakRule: 'both' | 'at-least-one';
   defaultReadingMode: 'single' | 'continuous';
+  sampleDataCleanupVersion?: number;
 }
