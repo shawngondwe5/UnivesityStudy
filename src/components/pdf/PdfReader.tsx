@@ -150,49 +150,28 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
   const lastHandledPageRef = useRef<number | null>(null);
 
-  // Callback that triggers whenever the user changes pages (either via scrolling or clicking).
-  // Updates the PDF document state in IndexedDB, specifically updating lastPositionPage and adding currentPage to studiedPages.
+  // Page views are tracked separately from confirmed study progress.
+  // Moving through a document only saves the resume position.
   const handlePageChange = useCallback(
     async (newPage: number) => {
-      if (newPage < 1) return;
+      if (newPage < 1 || newPage > totalPages) return;
 
-      // Track visited pages during this session
       setVisitedPages(prev => (prev.includes(newPage) ? prev : [...prev, newPage]));
 
-      // Immediately sync local state so UI badges and counters reflect the studied page
-      setStudiedPages(prev => {
-        if (prev.includes(newPage)) return prev;
-        return [...prev, newPage].sort((a, b) => a - b);
-      });
-
-      // Avoid duplicate executions for the same page
-      if (lastHandledPageRef.current === newPage) {
-        return;
-      }
+      if (lastHandledPageRef.current === newPage) return;
       lastHandledPageRef.current = newPage;
 
       try {
-        // Query latest PDF document from IndexedDB to ensure atomic addition
-        const currentDoc = await db.pdfs.get(pdfDoc.id);
-        const existingStudied = currentDoc?.studiedPages || pdfDoc.studiedPages || [];
-        const studiedSet = new Set<number>(existingStudied);
-        studiedSet.add(newPage);
-        const updatedStudiedPages = Array.from(studiedSet).sort((a, b) => a - b);
-
-        // Update the PDF document state in IndexedDB
         await db.pdfs.update(pdfDoc.id, {
           lastPositionPage: newPage,
-          studiedPages: updatedStudiedPages,
           lastReadAt: Date.now()
         });
-
-        // Trigger optional external callback prop
         onPageChangeRef.current?.(newPage);
       } catch (err) {
-        console.error('Failed to update PDF document state in IndexedDB on page change:', err);
+        console.error('Failed to update PDF reading position:', err);
       }
     },
-    [pdfDoc.id]
+    [pdfDoc.id, totalPages]
   );
 
   // Synchronize initial page or any direct page change
@@ -457,10 +436,12 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
     await db.pdfs.update(pdfDoc.id, {
       studiedPages: mergedPages,
-      totalFirstTimeTime: (pdfDoc.totalFirstTimeTime || 0) + timerSeconds,
+      totalFirstTimeTime: (currentDoc?.totalFirstTimeTime || pdfDoc.totalFirstTimeTime || 0) + timerSeconds,
       lastReadAt: Date.now(),
       lastPositionPage: currentPage
     });
+    setStudiedPages(mergedPages);
+    onPageChangeRef.current?.(currentPage);
 
     setShowFinishModal(false);
     onClose();

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, X, Plus, AlertCircle, FileCheck } from 'lucide-react';
 
 interface FinishReviewModalProps {
@@ -19,16 +19,21 @@ export const FinishReviewModal: React.FC<FinishReviewModalProps> = ({
   onConfirm,
   onCancel
 }) => {
-  if (!isOpen) return null;
-
-  // Initial candidate pages: visited during session that were not previously studied
-  const initialCandidates = Array.from(new Set(visitedPages))
-    .filter(p => !alreadyStudiedPages.includes(p))
-    .sort((a, b) => a - b);
-
-  const [selectedPages, setSelectedPages] = useState<number[]>(initialCandidates);
+  const [selectedPages, setSelectedPages] = useState<number[]>([]);
   const [manualPageInput, setManualPageInput] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const candidates = Array.from(new Set(visitedPages))
+      .filter(page => page >= 1 && page <= totalPages && !alreadyStudiedPages.includes(page))
+      .sort((a, b) => a - b);
+    setSelectedPages(candidates);
+    setManualPageInput('');
+    setErrorMsg('');
+  }, [isOpen, visitedPages, alreadyStudiedPages, totalPages]);
+
+  if (!isOpen) return null;
 
   const togglePage = (page: number) => {
     if (selectedPages.includes(page)) {
