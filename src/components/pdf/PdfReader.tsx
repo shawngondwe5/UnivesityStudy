@@ -422,7 +422,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       eventBus.off('scalechanging', onScaleChanging);
       eventBus.off('updatefindmatchescount', onFindMatches);
       eventBus.off('pagesinit', initializeView);
-      viewer.setDocument(null);
+      viewer.setDocument(null as any);
       linkService.setDocument(null as any, null);
       viewer.cleanup();
       pdfViewerRef.current = null;
