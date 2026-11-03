@@ -211,8 +211,8 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     const outside = (event: PointerEvent) => { if (!activeNotePopup.pinned && event.target instanceof Element && !event.target.closest('.pdf-note-popup')) setActiveNotePopup(null); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('keydown', key); document.addEventListener('pointerdown', outside);
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('keydown', key); document.removeEventListener('pointerdown', outside); };
-  }, [activeNotePopup?.noteId, pdfDoc.id]);
-  useEffect(() => { const note = notes.find(item => item.id === activeNotePopup?.noteId); if (note) setNoteEditDraft(note.noteText || ''); }, [activeNotePopup?.noteId]);
+  }, [activeNotePopup?.noteId, activeNotePopup?.pinned, pdfDoc.id]);
+  useEffect(() => { const note = notes.find(item => item.id === activeNotePopup?.noteId); if (note) setNoteEditDraft(note.noteText || ''); }, [activeNotePopup?.noteId, notes]);
   const saveNoteEdit = async () => { if (activeNotePopup) await db.notes.update(activeNotePopup.noteId, { noteText: noteEditDraft, updatedAt: Date.now() }); };
   const insertNoteFormatting = (before: string, after = before) => { const area = document.querySelector<HTMLTextAreaElement>('.pdf-note-edit'); if (!area) return; const start = area.selectionStart, end = area.selectionEnd; setNoteEditDraft(noteEditDraft.slice(0,start) + before + noteEditDraft.slice(start,end) + after + noteEditDraft.slice(end)); requestAnimationFrame(() => { area.focus(); area.setSelectionRange(start + before.length, end + before.length); }); };
 
