@@ -32,6 +32,12 @@ import { ResumePositionModal } from './ResumePositionModal';
 // PDF.js text-layer helper. The task is cancelled whenever its page is rerendered.
 async function renderPdfTextLayer(page: pdfjsLib.PDFPageProxy, viewport: any, container: HTMLDivElement) {
   container.replaceChildren();
+  // PDF.js 3.x uses this CSS variable when calculating selectable text spans.
+  // Without it the text layer can render at zero/incorrect scale and be impossible to select.
+  container.style.setProperty('--scale-factor', String(viewport.scale));
+  container.style.position = 'absolute';
+  container.style.inset = '0 auto auto 0';
+  container.style.zIndex = '2';
   const textContent = await page.getTextContent();
   const render = (pdfjsLib as any).renderTextLayer as (options: { textContent: unknown; container: HTMLDivElement; viewport: any; textDivs: HTMLElement[] }) => { promise: Promise<void>; cancel: () => void };
   const task = render({ textContent, container, viewport, textDivs: [] });
@@ -361,6 +367,8 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         if (textLayer) {
           textLayer.style.width = viewport.width + 'px';
           textLayer.style.height = viewport.height + 'px';
+          textLayer.style.setProperty('--scale-factor', String(viewport.scale));
+          textLayer.style.zIndex = '2';
           textRenderTask = await renderPdfTextLayer(page, viewport, textLayer);
         }
       } catch (err: any) {
@@ -415,6 +423,10 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         textLayer.className = 'textLayer pdf-text-layer';
         textLayer.style.width = viewport.width + 'px';
         textLayer.style.height = viewport.height + 'px';
+        textLayer.style.setProperty('--scale-factor', String(viewport.scale));
+        textLayer.style.zIndex = '2';
+        canvas.style.position = 'relative';
+        canvas.style.zIndex = '0';
         wrapper.appendChild(canvas);
         wrapper.appendChild(textLayer);
         wrapper.appendChild(label);
