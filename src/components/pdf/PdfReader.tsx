@@ -689,7 +689,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       )}
 
       {/* Reader Main Body */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="pdf-reader-body relative flex flex-1 overflow-hidden">
         {/* Left Panel: Page Thumbnails & Navigation */}
         {isPagePanelOpen && (
         <aside className="pdf-reader-sidebar w-56 shrink-0 border-r flex flex-col" aria-label="Page navigation">
