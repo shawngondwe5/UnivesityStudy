@@ -38,8 +38,8 @@ app.post('/api/ai/summarize', async (req, res) => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const mode = req.body?.mode === 'explain' ? 'explain' : 'summarize';
-    const looksLikeQuestion = /\?\s*$/.test(selectedText) || /^(what|why|how|when|where|who|which|is|are|was|were|do|does|did|can|could|would|should|will|define|explain|describe|name|list)\\b/i.test(selectedText);
-    const isShortSelection = selectedText.split(/\\s+/).filter(Boolean).length <= 4;
+    const looksLikeQuestion = /\?\s*$/.test(selectedText) || /^(what|why|how|when|where|who|which|is|are|was|were|do|does|did|can|could|would|should|will|define|explain|describe|name|list)\b/i.test(selectedText);
+    const isShortSelection = selectedText.split(/\s+/).filter(Boolean).length <= 4;
     const instruction = mode === 'explain'
       ? (looksLikeQuestion
         ? 'The selected text is a QUESTION. Answer the question directly; do not explain or paraphrase the question. Give the correct answer in very simple everyday English, in 1-3 short sentences (maximum 70 words). Use the surrounding page context when it helps. If the page does not contain enough information, answer from reliable general knowledge and say briefly if something is uncertain.'
