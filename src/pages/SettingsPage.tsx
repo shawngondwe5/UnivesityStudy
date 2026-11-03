@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Moon, Sun, ShieldCheck, Check, Sparkles } from 'lucide-react';
+import { Moon, Sun, ShieldCheck, Check } from 'lucide-react';
 import type { AppSettings } from '../types';
 import { db } from '../db';
-import { createSamplePdfBlob } from '../utils/samplePdf';
 
 interface SettingsPageProps {
   settings: AppSettings;
@@ -17,8 +16,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onUpdateSe
   const [streakRule, setStreakRule] = useState(settings.streakRule);
   const [defaultMode, setDefaultMode] = useState(settings.defaultReadingMode);
   const [isSaved, setIsSaved] = useState(false);
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [seedNotice, setSeedNotice] = useState('');
 
   // Keep local state in sync if settings update externally
   useEffect(() => {
@@ -72,77 +69,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onUpdateSe
       streakRule,
       defaultReadingMode: defaultMode
     });
-  };
-
-  const handleSeedDemoData = async () => {
-    setIsSeeding(true);
-    try {
-      const courseId = crypto.randomUUID();
-      await db.courses.add({
-        id: courseId,
-        name: 'Cognitive Psychology & Memory',
-        description: 'Core models of human memory, sensory processing, and experimental research methodologies.',
-        createdAt: Date.now()
-      });
-
-      const lectureId1 = crypto.randomUUID();
-      await db.lectures.add({
-        id: lectureId1,
-        courseId,
-        name: 'Lecture 1: Working Memory & Retention',
-        order: 1,
-        createdAt: Date.now()
-      });
-
-      const lectureId2 = crypto.randomUUID();
-      await db.lectures.add({
-        id: lectureId2,
-        courseId,
-        name: 'Lecture 2: Long-term Semantic Networks',
-        order: 2,
-        createdAt: Date.now()
-      });
-
-      // Add 2 multi-page test PDFs
-      const pdf1Blob = createSamplePdfBlob('Working Memory Architecture', 'Cognitive Psychology', 8);
-      await db.pdfs.add({
-        id: crypto.randomUUID(),
-        lectureId: lectureId1,
-        courseId,
-        filename: 'Working_Memory_Architecture_L1.pdf',
-        blob: pdf1Blob,
-        totalPages: 8,
-        studiedPages: [1, 2, 3],
-        lastPositionPage: 3,
-        order: 1,
-        uploadedAt: Date.now(),
-        totalFirstTimeTime: 1800,
-        totalRevisionTime: 600
-      });
-
-      const pdf2Blob = createSamplePdfBlob('Semantic Encoding and Recall', 'Cognitive Psychology', 10);
-      await db.pdfs.add({
-        id: crypto.randomUUID(),
-        lectureId: lectureId2,
-        courseId,
-        filename: 'Semantic_Encoding_L2.pdf',
-        blob: pdf2Blob,
-        totalPages: 10,
-        studiedPages: [],
-        lastPositionPage: 1,
-        order: 1,
-        uploadedAt: Date.now(),
-        totalFirstTimeTime: 0,
-        totalRevisionTime: 0
-      });
-
-      setSeedNotice('Sample course and lecture materials added to your library!');
-      setTimeout(() => setSeedNotice(''), 3000);
-    } catch (e) {
-      console.error('Failed to seed demo data:', e);
-    } finally {
-      setIsSeeding(false);
-    }
   };
 
   return (
@@ -280,32 +206,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onUpdateSe
             </div>
           </div>
         </div>
-
-        {/* Quick Sample Data Generator */}
-        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">Sample Academic Data</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Instantly populate a sample university module with multi-page lecture PDFs to test reader &amp; analytics.
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={isSeeding}
-            onClick={handleSeedDemoData}
-            aria-label="Add sample course data"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer self-start sm:self-auto"
-          >
-            <Sparkles className="w-4 h-4 text-blue-600" />
-            <span>{isSeeding ? 'Adding...' : 'Load Sample Course'}</span>
-          </button>
-        </div>
-
-        {seedNotice && (
-          <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-semibold border border-blue-200 dark:border-blue-800">
-            {seedNotice}
-          </div>
-        )}
 
         {/* Local Storage Privacy Advisory */}
         <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-start gap-3">
