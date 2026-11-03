@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, getSettings } from './db';
+import { db, getSettings, initializeDatabase } from './db';
 import type { PDFDocument, AppSettings } from './types';
 import { Sidebar } from './components/layout/Sidebar';
 import { Dashboard } from './pages/Dashboard';
@@ -24,7 +24,10 @@ export const App: React.FC = () => {
   } | null>(null);
 
   // Settings state
-  const liveSettings = useLiveQuery(() => db.settings.get('user-settings'));
+  const liveSettings = useLiveQuery(async () => {
+    await initializeDatabase();
+    return db.settings.get('user-settings');
+  });
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
   useEffect(() => {
@@ -48,10 +51,22 @@ export const App: React.FC = () => {
   }, [settings?.theme]);
 
   // Reactive IndexedDB queries via Dexie hooks
-  const courses = useLiveQuery(() => db.courses.toArray(), []) || [];
-  const lectures = useLiveQuery(() => db.lectures.toArray(), []) || [];
-  const pdfs = useLiveQuery(() => db.pdfs.toArray(), []) || [];
-  const sessions = useLiveQuery(() => db.sessions.toArray(), []) || [];
+  const courses = useLiveQuery(async () => {
+    await initializeDatabase();
+    return db.courses.toArray();
+  }, []) || [];
+  const lectures = useLiveQuery(async () => {
+    await initializeDatabase();
+    return db.lectures.toArray();
+  }, []) || [];
+  const pdfs = useLiveQuery(async () => {
+    await initializeDatabase();
+    return db.pdfs.toArray();
+  }, []) || [];
+  const sessions = useLiveQuery(async () => {
+    await initializeDatabase();
+    return db.sessions.toArray();
+  }, []) || [];
 
   if (!settings) return null;
 
