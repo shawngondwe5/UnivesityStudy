@@ -1,0 +1,6 @@
+{
+  "summary": "Completed implementation: active thumbnail in PdfReader sidebar now automatically and smoothly scrolls into view when page changes or reaches the visible edge.",
+  "updatedAt": "2026-11-02T21:39:02.657505119Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

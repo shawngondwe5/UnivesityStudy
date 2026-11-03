@@ -1,0 +1,777 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
+import {
+  ArrowLeft,
+  ZoomIn,
+  ZoomOut,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Pause,
+  CheckCircle2,
+  AlertTriangle
+} from 'lucide-react';
+import type { PDFDocument, StudySession, SessionType, AppSettings } from '../../types';
+import { db } from '../../db';
+import { formatTimer, getDateKey } from '../../utils/calculations';
+import { useInactivity } from '../../hooks/useInactivity';
+import { FinishReviewModal } from './FinishReviewModal';
+import { ResumePositionModal } from './ResumePositionModal';
+
+// Set offline local worker bundle, with fallback
+try {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker || `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+} catch (e) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+}
+
+interface PdfReaderProps {
+  pdfDoc: PDFDocument;
+  courseName: string;
+  lectureName: string;
+  settings: AppSettings;
+  onClose: () => void;
+  onPageChange?: (newPage: number) => void;
+}
+
+export const PdfReader: React.FC<PdfReaderProps> = ({
+  pdfDoc,
+  courseName,
+  lectureName,
+  settings,
+  onClose,
+  onPageChange
+}) => {
+  const [pdfProxy, setPdfProxy] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(pdfDoc.lastPositionPage || 1);
+  const [totalPages, setTotalPages] = useState<number>(pdfDoc.totalPages || 1);
+  const [scale, setScale] = useState<number>(1.2);
+  const [readingMode, setReadingMode] = useState<'single' | 'continuous'>(settings.defaultReadingMode || 'single');
+
+  // Document progress state (in-memory sync with IndexedDB)
+  const [studiedPages, setStudiedPages] = useState<number[]>(pdfDoc.studiedPages || []);
+  const lastRecordedPageRef = useRef<number | null>(null);
+
+  // Study timer and session states
+  const [sessionMode, setSessionMode] = useState<SessionType>('first-time');
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(true); // Auto-start reading timer
+  const [timerSeconds, setTimerSeconds] = useState<number>(0);
+  const [visitedPages, setVisitedPages] = useState<number[]>([pdfDoc.lastPositionPage || 1]);
+  const [sessionStartTime, setSessionStartTime] = useState<number>(Date.now());
+
+  // Inactivity notification state
+  const [showInactivityNotice, setShowInactivityNotice] = useState<boolean>(false);
+
+  // Modals
+  const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
+  const [showResumeModal, setShowResumeModal] = useState<boolean>(false);
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const mainScrollContainerRef = useRef<HTMLElement | null>(null);
+  const continuousContainerRef = useRef<HTMLDivElement | null>(null);
+  const activeThumbnailRef = useRef<HTMLButtonElement | null>(null);
+  const timerIntervalRef = useRef<number | null>(null);
+
+  // Sync reading mode if settings change
+  useEffect(() => {
+    if (settings.defaultReadingMode) {
+      setReadingMode(settings.defaultReadingMode);
+    }
+  }, [settings.defaultReadingMode]);
+
+  // Load PDF file from Blob
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadPdf = async () => {
+      try {
+        const arrayBuffer = await pdfDoc.blob.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const proxy = await loadingTask.promise;
+        if (!isCancelled) {
+          setPdfProxy(proxy);
+          setTotalPages(proxy.numPages);
+
+          // Check if there is an unread page earlier than last position
+          const studiedSet = new Set(pdfDoc.studiedPages || []);
+          let earliest = 1;
+          for (let p = 1; p <= proxy.numPages; p++) {
+            if (!studiedSet.has(p)) {
+              earliest = p;
+              break;
+            }
+          }
+
+          if (pdfDoc.lastPositionPage > 1 && earliest !== pdfDoc.lastPositionPage) {
+            setShowResumeModal(true);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load PDF document:', err);
+      }
+    };
+
+    loadPdf();
+    return () => {
+      isCancelled = true;
+    };
+  }, [pdfDoc.id]);
+
+  // Handle study timer interval
+  useEffect(() => {
+    if (isTimerRunning) {
+      timerIntervalRef.current = window.setInterval(() => {
+        setTimerSeconds(s => s + 1);
+      }, 1000);
+    } else {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    }
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+  }, [isTimerRunning]);
+
+  // Inactivity hook (pauses timer after inactivity threshold)
+  useInactivity({
+    thresholdMinutes: settings.inactivityThresholdMinutes,
+    isActive: isTimerRunning,
+    onInactive: () => {
+      setIsTimerRunning(false);
+      setShowInactivityNotice(true);
+    }
+  });
+
+  const onPageChangeRef = useRef(onPageChange);
+  useEffect(() => {
+    onPageChangeRef.current = onPageChange;
+  }, [onPageChange]);
+
+  const lastHandledPageRef = useRef<number | null>(null);
+
+  // Callback that triggers whenever the user changes pages (either via scrolling or clicking).
+  // Updates the PDF document state in IndexedDB, specifically updating lastPositionPage and adding currentPage to studiedPages.
+  const handlePageChange = useCallback(
+    async (newPage: number) => {
+      if (newPage < 1) return;
+
+      // Track visited pages during this session
+      setVisitedPages(prev => (prev.includes(newPage) ? prev : [...prev, newPage]));
+
+      // Immediately sync local state so UI badges and counters reflect the studied page
+      setStudiedPages(prev => {
+        if (prev.includes(newPage)) return prev;
+        return [...prev, newPage].sort((a, b) => a - b);
+      });
+
+      // Avoid duplicate executions for the same page
+      if (lastHandledPageRef.current === newPage) {
+        return;
+      }
+      lastHandledPageRef.current = newPage;
+
+      try {
+        // Query latest PDF document from IndexedDB to ensure atomic addition
+        const currentDoc = await db.pdfs.get(pdfDoc.id);
+        const existingStudied = currentDoc?.studiedPages || pdfDoc.studiedPages || [];
+        const studiedSet = new Set<number>(existingStudied);
+        studiedSet.add(newPage);
+        const updatedStudiedPages = Array.from(studiedSet).sort((a, b) => a - b);
+
+        // Update the PDF document state in IndexedDB
+        await db.pdfs.update(pdfDoc.id, {
+          lastPositionPage: newPage,
+          studiedPages: updatedStudiedPages,
+          lastReadAt: Date.now()
+        });
+
+        // Trigger optional external callback prop
+        onPageChangeRef.current?.(newPage);
+      } catch (err) {
+        console.error('Failed to update PDF document state in IndexedDB on page change:', err);
+      }
+    },
+    [pdfDoc.id]
+  );
+
+  // Synchronize initial page or any direct page change
+  useEffect(() => {
+    handlePageChange(currentPage);
+  }, [currentPage, handlePageChange]);
+
+  // Render current page in single mode
+  useEffect(() => {
+    if (!pdfProxy || readingMode !== 'single' || !canvasRef.current) return;
+
+    let renderTask: any = null;
+
+    const renderPage = async () => {
+      try {
+        const page = await pdfProxy.getPage(currentPage);
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const context = canvas.getContext('2d');
+        if (!context) return;
+
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        renderTask = page.render({ canvasContext: context, viewport });
+        await renderTask.promise;
+      } catch (err: any) {
+        if (err.name !== 'RenderingCancelledException') {
+          console.error('Page render error:', err);
+        }
+      }
+    };
+
+    renderPage();
+    return () => {
+      if (renderTask) renderTask.cancel();
+    };
+  }, [pdfProxy, currentPage, scale, readingMode]);
+
+  // Render all pages in continuous scrolling mode
+  useEffect(() => {
+    if (!pdfProxy || readingMode !== 'continuous' || !continuousContainerRef.current) return;
+
+    let isCancelled = false;
+    const container = continuousContainerRef.current;
+    container.innerHTML = '';
+
+    const renderAllPages = async () => {
+      for (let num = 1; num <= pdfProxy.numPages; num++) {
+        if (isCancelled) break;
+        const page = await pdfProxy.getPage(num);
+        const viewport = page.getViewport({ scale });
+        const wrapper = document.createElement('div');
+        wrapper.className = 'mb-6 flex flex-col items-center shadow-md';
+        wrapper.id = `continuous-page-${num}`;
+        wrapper.setAttribute('data-page-number', String(num));
+
+        const canvas = document.createElement('canvas');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          await page.render({ canvasContext: ctx, viewport }).promise;
+        }
+
+        const label = document.createElement('div');
+        label.className = 'text-xs text-slate-400 mt-2 font-mono';
+        label.innerText = `Page ${num}`;
+
+        wrapper.appendChild(canvas);
+        wrapper.appendChild(label);
+        container.appendChild(wrapper);
+      }
+    };
+
+    renderAllPages();
+    return () => {
+      isCancelled = true;
+    };
+  }, [pdfProxy, readingMode, scale]);
+
+  // Automatic Continuous Scroll Tracking
+  useEffect(() => {
+    if (readingMode !== 'continuous' || !pdfProxy || !mainScrollContainerRef.current) return;
+
+    const scrollContainer = mainScrollContainerRef.current;
+
+    const handleScroll = () => {
+      const pageElements = scrollContainer.querySelectorAll<HTMLElement>('[data-page-number]');
+      if (pageElements.length === 0) return;
+
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const containerMiddle = containerRect.top + containerRect.height / 3;
+
+      let closestPage = currentPage;
+      let minDistance = Infinity;
+
+      pageElements.forEach(el => {
+        const rect = el.getBoundingClientRect();
+        const dist = Math.abs(rect.top - containerMiddle);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestPage = Number(el.getAttribute('data-page-number'));
+        }
+      });
+
+      if (closestPage && closestPage >= 1 && closestPage <= totalPages && closestPage !== currentPage) {
+        setCurrentPage(closestPage);
+        handlePageChange(closestPage);
+        if (!isTimerRunning) {
+          setIsTimerRunning(true);
+          setShowInactivityNotice(false);
+        }
+      }
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+    };
+  }, [readingMode, pdfProxy, totalPages, currentPage, isTimerRunning, handlePageChange]);
+
+  // Keyboard navigation for page turning
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (showFinishModal || showResumeModal || ['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        return;
+      }
+
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+        e.preventDefault();
+        navigateToPage(Math.min(totalPages, currentPage + 1));
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        navigateToPage(Math.max(1, currentPage - 1));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentPage, totalPages, readingMode, showFinishModal, showResumeModal]);
+
+  const navigateToPage = (pageNum: number) => {
+    if (pageNum < 1 || pageNum > totalPages) return;
+    setCurrentPage(pageNum);
+    handlePageChange(pageNum);
+
+    if (readingMode === 'continuous') {
+      const el = document.getElementById(`continuous-page-${pageNum}`);
+      el?.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    if (!isTimerRunning) {
+      setIsTimerRunning(true);
+      setShowInactivityNotice(false);
+    }
+  };
+
+  // Keep sidebar thumbnail list scrolled so current page remains in view
+  useEffect(() => {
+    if (activeThumbnailRef.current) {
+      activeThumbnailRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'nearest',
+      });
+    }
+  }, [currentPage]);
+
+  const handleToggleReadingMode = async () => {
+    const nextMode: 'single' | 'continuous' = readingMode === 'single' ? 'continuous' : 'single';
+    setReadingMode(nextMode);
+    // Persist user preference into IndexedDB
+    const updated: AppSettings = { ...settings, defaultReadingMode: nextMode };
+    await db.settings.put(updated);
+  };
+
+  // Start study session
+  const handleStartSession = () => {
+    setIsTimerRunning(true);
+    setShowInactivityNotice(false);
+    if (!sessionStartTime) {
+      setSessionStartTime(Date.now());
+    }
+  };
+
+  // Pause study session
+  const handlePauseSession = () => {
+    setIsTimerRunning(false);
+  };
+
+  // Handle Finish Now
+  const handleFinishNow = () => {
+    setIsTimerRunning(false);
+    if (sessionMode === 'first-time') {
+      setShowFinishModal(true);
+    } else {
+      handleSaveRevisionSession();
+    }
+  };
+
+  const handleSaveRevisionSession = async () => {
+    if (timerSeconds < 5) {
+      onClose();
+      return;
+    }
+
+    const session: StudySession = {
+      id: crypto.randomUUID(),
+      pdfId: pdfDoc.id,
+      pdfName: pdfDoc.filename,
+      courseId: pdfDoc.courseId,
+      courseName,
+      lectureId: pdfDoc.lectureId,
+      lectureName,
+      sessionType: 'revision',
+      startedAt: sessionStartTime || Date.now() - timerSeconds * 1000,
+      endedAt: Date.now(),
+      durationSeconds: timerSeconds,
+      visitedPages: [],
+      confirmedPages: [],
+      isUnfinished: false,
+      dateKey: getDateKey()
+    };
+
+    await db.sessions.add(session);
+    await db.pdfs.update(pdfDoc.id, {
+      totalRevisionTime: (pdfDoc.totalRevisionTime || 0) + timerSeconds,
+      lastReadAt: Date.now()
+    });
+    onClose();
+  };
+
+  // Confirm pages from Finish Review Modal
+  const handleConfirmPages = async (confirmedPages: number[]) => {
+    const session: StudySession = {
+      id: crypto.randomUUID(),
+      pdfId: pdfDoc.id,
+      pdfName: pdfDoc.filename,
+      courseId: pdfDoc.courseId,
+      courseName,
+      lectureId: pdfDoc.lectureId,
+      lectureName,
+      sessionType: 'first-time',
+      startedAt: sessionStartTime || Date.now() - timerSeconds * 1000,
+      endedAt: Date.now(),
+      durationSeconds: timerSeconds,
+      visitedPages,
+      confirmedPages,
+      isUnfinished: false,
+      dateKey: getDateKey()
+    };
+
+    await db.sessions.add(session);
+
+    // Merge confirmed pages into unique studiedPages set
+    const currentDoc = await db.pdfs.get(pdfDoc.id);
+    const currentStudied = new Set(currentDoc?.studiedPages || studiedPages);
+    confirmedPages.forEach(p => currentStudied.add(p));
+    const mergedPages = Array.from(currentStudied).sort((a, b) => a - b);
+
+    await db.pdfs.update(pdfDoc.id, {
+      studiedPages: mergedPages,
+      totalFirstTimeTime: (pdfDoc.totalFirstTimeTime || 0) + timerSeconds,
+      lastReadAt: Date.now(),
+      lastPositionPage: currentPage
+    });
+
+    setShowFinishModal(false);
+    onClose();
+  };
+
+  // Close safely preserving unfinished session
+  const handleSafeClose = async () => {
+    if (timerSeconds >= 10) {
+      const unfinishedSession: StudySession = {
+        id: crypto.randomUUID(),
+        pdfId: pdfDoc.id,
+        pdfName: pdfDoc.filename,
+        courseId: pdfDoc.courseId,
+        courseName,
+        lectureId: pdfDoc.lectureId,
+        lectureName,
+        sessionType: sessionMode,
+        startedAt: sessionStartTime || Date.now() - timerSeconds * 1000,
+        endedAt: Date.now(),
+        durationSeconds: timerSeconds,
+        visitedPages,
+        confirmedPages: [],
+        isUnfinished: true,
+        dateKey: getDateKey()
+      };
+      await db.sessions.add(unfinishedSession);
+    }
+    onClose();
+  };
+
+  const studiedSet = new Set(studiedPages);
+  const progressPercent = totalPages > 0 ? Math.round((studiedSet.size / totalPages) * 100) : 0;
+
+  return (
+    <div
+      role="region"
+      aria-label="PDF Reader Workspace"
+      className="fixed inset-0 z-40 flex flex-col bg-slate-900 text-slate-100 select-none"
+    >
+      {/* Top Header & Reading Controls */}
+      <header className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={handleSafeClose}
+            aria-label="Back to course materials"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back</span>
+          </button>
+          <div>
+            <div className="text-sm font-bold text-white truncate max-w-sm">{pdfDoc.filename}</div>
+            <div className="text-xs text-slate-400">
+              {courseName} &bull; {lectureName}
+            </div>
+          </div>
+        </div>
+
+        {/* Study Timer Center Controls */}
+        <div className="flex items-center gap-4 bg-slate-900 px-4 py-1.5 rounded-2xl border border-slate-800">
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                isTimerRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'
+              }`}
+            />
+            <span className="font-mono text-base font-bold tracking-wider text-white">
+              {formatTimer(timerSeconds)}
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-800" />
+
+          {/* Mode Selector */}
+          <select
+            value={sessionMode}
+            onChange={e => setSessionMode(e.target.value as SessionType)}
+            aria-label="Session reading mode"
+            className="bg-transparent text-xs text-slate-300 font-medium focus:outline-none cursor-pointer"
+          >
+            <option value="first-time" className="bg-slate-900 text-white">First-time Reading</option>
+            <option value="revision" className="bg-slate-900 text-white">Revision Session</option>
+          </select>
+
+          <div className="h-4 w-px bg-slate-800" />
+
+          {!isTimerRunning ? (
+            <button
+              type="button"
+              onClick={handleStartSession}
+              aria-label="Start reading timer"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Resume Timer</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePauseSession}
+              aria-label="Pause reading timer"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition cursor-pointer"
+            >
+              <Pause className="w-3.5 h-3.5 fill-current" />
+              <span>Pause</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleFinishNow}
+            disabled={visitedPages.length === 0 && timerSeconds === 0}
+            aria-label="Finish study session now"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white transition cursor-pointer"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Finish Now</span>
+          </button>
+        </div>
+
+        {/* View Mode & Zoom Controls */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setScale(s => Math.max(0.6, s - 0.2))}
+              aria-label="Zoom out"
+              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 cursor-pointer"
+              title="Zoom Out"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-mono px-2 text-slate-400">{Math.round(scale * 100)}%</span>
+            <button
+              type="button"
+              onClick={() => setScale(s => Math.min(2.5, s + 0.2))}
+              aria-label="Zoom in"
+              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 cursor-pointer"
+              title="Zoom In"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800">
+            <button
+              type="button"
+              onClick={handleToggleReadingMode}
+              aria-label={readingMode === 'single' ? 'Switch to Continuous Scrolling' : 'Switch to Single Page'}
+              className="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-800 text-slate-300 cursor-pointer"
+            >
+              {readingMode === 'single' ? 'Single' : 'Scroll'}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Inactivity Alert Banner */}
+      {showInactivityNotice && (
+        <div className="bg-amber-600 text-white px-4 py-2 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            <span>Study timer paused. No activity detected for {settings.inactivityThresholdMinutes} minutes.</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleStartSession}
+            className="px-3 py-1 rounded bg-white text-amber-900 font-bold hover:bg-amber-50 cursor-pointer"
+          >
+            Resume Studying
+          </button>
+        </div>
+      )}
+
+      {/* Reader Main Body */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Panel: Page Thumbnails & Navigation */}
+        <aside className="w-56 border-r border-slate-800 bg-slate-950 flex flex-col" aria-label="Page navigation">
+          <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between text-xs">
+            <span className="font-semibold text-slate-300">Pages ({totalPages})</span>
+            <span className="text-blue-400 font-mono">{progressPercent}% studied</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNumber => {
+              const isStudied = studiedSet.has(pageNumber);
+              const isCurrent = currentPage === pageNumber;
+              const isVisitedCurrent = visitedPages.includes(pageNumber);
+
+              return (
+                <button
+                  key={pageNumber}
+                  id={`sidebar-page-btn-${pageNumber}`}
+                  ref={isCurrent ? activeThumbnailRef : null}
+                  type="button"
+                  aria-label={`Jump to page ${pageNumber}`}
+                  onClick={() => navigateToPage(pageNumber)}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-left text-xs transition cursor-pointer ${
+                    isCurrent
+                      ? 'border-blue-500 bg-blue-950/40 text-white'
+                      : 'border-slate-800 bg-slate-900/60 hover:bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-slate-400">{pageNumber}</span>
+                    <span className="truncate">Page {pageNumber}</span>
+                  </div>
+
+                  {/* Status Indicator */}
+                  <div>
+                    {isStudied ? (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+                        Studied
+                      </span>
+                    ) : isVisitedCurrent ? (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">
+                        Visited
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400">
+                        Unread
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* Center Panel: PDF Viewer */}
+        <main
+          ref={mainScrollContainerRef}
+          className="flex-1 overflow-auto bg-slate-900 flex flex-col items-center p-6 relative"
+        >
+          {readingMode === 'single' ? (
+            <div className="flex flex-col items-center pb-20">
+              <canvas
+                ref={canvasRef}
+                className="shadow-2xl rounded-sm bg-white border border-slate-700"
+              />
+            </div>
+          ) : (
+            <div ref={continuousContainerRef} className="w-full flex flex-col items-center pb-24" />
+          )}
+
+          {/* Floating Bottom Pagination Controls (Always available in both modes) */}
+          <div className="fixed bottom-6 flex items-center gap-4 bg-slate-950/90 backdrop-blur px-5 py-2.5 rounded-full border border-slate-800 shadow-xl z-30">
+            <button
+              type="button"
+              onClick={() => navigateToPage(currentPage - 1)}
+              disabled={currentPage <= 1}
+              aria-label="Previous page"
+              className="p-1.5 rounded-full hover:bg-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <span className="text-xs font-mono font-medium text-slate-200">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => navigateToPage(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+              aria-label="Next page"
+              className="p-1.5 rounded-full hover:bg-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        </main>
+      </div>
+
+      {/* Modals */}
+      <FinishReviewModal
+        isOpen={showFinishModal}
+        totalPages={totalPages}
+        visitedPages={visitedPages}
+        alreadyStudiedPages={studiedPages}
+        sessionDurationSeconds={timerSeconds}
+        onConfirm={handleConfirmPages}
+        onCancel={() => setShowFinishModal(false)}
+      />
+
+      <ResumePositionModal
+        isOpen={showResumeModal}
+        lastPosition={pdfDoc.lastPositionPage}
+        earliestUnread={(() => {
+          const s = new Set(pdfDoc.studiedPages || []);
+          for (let i = 1; i <= totalPages; i++) {
+            if (!s.has(i)) return i;
+          }
+          return 1;
+        })()}
+        onResumeLast={() => {
+          navigateToPage(pdfDoc.lastPositionPage);
+          setShowResumeModal(false);
+        }}
+        onResumeEarliest={() => {
+          const s = new Set(pdfDoc.studiedPages || []);
+          let earliest = 1;
+          for (let i = 1; i <= totalPages; i++) {
+            if (!s.has(i)) {
+              earliest = i;
+              break;
+            }
+          }
+          navigateToPage(earliest);
+          setShowResumeModal(false);
+        }}
+      />
+    </div>
+  );
+};

@@ -1,0 +1,6 @@
+{
+  "name": "University Reading & Study Tracker",
+  "description": "100% offline-first academic reading, lecture material organization, PDF study timer, and reading progress tracker.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
