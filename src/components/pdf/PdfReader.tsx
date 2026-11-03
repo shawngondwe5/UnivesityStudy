@@ -31,7 +31,7 @@ import {
 // Use PDF.js's own viewer engine for virtualized page rendering, text layers,
 // selection, find highlighting, link navigation, and page/zoom management.
 // @ts-ignore - pdfjs-dist 3.x ships the viewer bundle without complete TS declarations.
-import { EventBus, PDFViewer, PDFLinkService, PDFFindController, ScrollMode } from 'pdfjs-dist/web/pdf_viewer';
+import { EventBus, PDFViewer, PDFLinkService, PDFFindController, ScrollMode } from 'pdfjs-dist/legacy/web/pdf_viewer';
 import type { PDFDocument, StudySession, SessionType, AppSettings, StudyNote } from '../../types';
 import { db } from '../../db';
 import { formatTimer, getDateKey } from '../../utils/calculations';
