@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -132,18 +131,18 @@
   --color-blue-700: #08699e;
   --color-blue-800: #0a527a;
   --color-blue-900: #0b3d5c;
-  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: cera, "cera Fallback", ui-sans-serif, system-ui, sans-serif;
 }
 :root {
-  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: cera, "cera Fallback", ui-sans-serif, system-ui, sans-serif;
   color: #101820;
   background: #ffffff;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
-body { background: #fff; color: #101820; font-family: "DM Sans", sans-serif; }
+body { background: #fff; color: #101820; font-family: cera, "cera Fallback", ui-sans-serif, system-ui, sans-serif; }
 h1, h2, h3, h4, .analytics-heading, .analytics-stat strong {
-  font-family: "Manrope", "DM Sans", sans-serif;
+  font-family: cera, "cera Fallback", ui-sans-serif, system-ui, sans-serif;
   letter-spacing: -.045em;
 }
 ::selection { background: #c9ff58; color: #101820; }
@@ -184,7 +183,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
 .heatmap-cell.level-3 { background: #35b8e9; }
 .heatmap-cell.level-4 { background: #087fbd; }
 .course-chart-fill { background: linear-gradient(90deg, #087fbd, #39c4f3); }
-.donut-center strong { font-family: "Manrope", sans-serif; }
+.donut-center strong { font-family: cera, "cera Fallback", ui-sans-serif, system-ui, sans-serif; }
 
 /* Dashboard feature panel echoes the reference's blue hero and lime call-to-action. */
 .dashboard-hero {
@@ -233,7 +232,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
 }
 .study-sidebar .sidebar-brand { border-color: rgba(255,255,255,.15) !important; }
 .study-sidebar .sidebar-logo { background: rgba(255,255,255,.15) !important; color: #fff !important; box-shadow: none !important; }
-.study-sidebar .sidebar-title { color: #fff !important; font-family: "Manrope", sans-serif; }
+.study-sidebar .sidebar-title { color: #fff !important; font-family: cera, "cera Fallback", ui-sans-serif, system-ui, sans-serif; }
 .study-sidebar .sidebar-caption { color: rgba(255,255,255,.65) !important; }
 .study-sidebar .sidebar-nav-item { color: rgba(255,255,255,.78) !important; border-radius: 13px; }
 .study-sidebar .sidebar-nav-item:hover { background: rgba(255,255,255,.12) !important; color: #fff !important; }
@@ -259,7 +258,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
   --reader-lime: #caff58;
   background: #f3f8fb;
   color: #183342;
-  font-family: "DM Sans", sans-serif;
+  font-family: cera, "cera Fallback", ui-sans-serif, system-ui, sans-serif;
 }
 .pdf-reader-header {
   flex-shrink: 0;
@@ -908,3 +907,46 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
   .analytics-stat { transition: none !important; }
   .analytics-stat:hover { transform: none; }
 }
+
+
+/* Subtle movement makes the dashboard and course library feel responsive, not busy. */
+.dashboard-hero::before { animation: hero-orbit 18s ease-in-out infinite alternate; }
+.dashboard-hero::after { animation: hero-orbit 22s ease-in-out infinite alternate-reverse; }
+.analytics-page > section { animation: analytics-card-in .48s cubic-bezier(.2,.7,.2,1) both; }
+.analytics-page > section:nth-of-type(2) { animation-delay: 45ms; }
+.analytics-page > section:nth-of-type(3) { animation-delay: 90ms; }
+.analytics-page > section:nth-of-type(4) { animation-delay: 135ms; }
+.analytics-page > section:nth-of-type(5) { animation-delay: 180ms; }
+.course-library-card {
+  transform: translateY(0);
+  transition: transform .22s cubic-bezier(.2,.7,.2,1), box-shadow .22s ease, border-color .22s ease, background-color .22s ease;
+}
+.course-library-card:hover {
+  transform: translateY(-3px);
+  border-color: #9edcf5;
+  box-shadow: 0 12px 28px rgba(8,127,189,.09);
+}
+.course-library-card:active { transform: translateY(-1px) scale(.995); }
+.course-library-card > div:last-child > div:last-child > div {
+  transition: width .7s cubic-bezier(.2,.7,.2,1);
+}
+.dashboard-hero .hero-secondary,
+.dashboard-hero .hero-cta,
+.analytics-link {
+  transition: transform .2s ease, color .2s ease, background-color .2s ease, gap .2s ease, box-shadow .2s ease;
+}
+.dashboard-hero .hero-secondary:hover { transform: translateY(-2px); }
+@keyframes hero-orbit {
+  from { transform: translate3d(0, 0, 0) rotate(-5deg); }
+  to { transform: translate3d(-10px, 8px, 0) rotate(5deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-hero::before, .dashboard-hero::after,
+  .analytics-page > section, .course-library-card {
+    animation: none !important;
+    transition: none !important;
+  }
+  .course-library-card:hover, .course-library-card:active { transform: none; }
+}
+
+.dashboard-hero strong { font-family: cera, "cera Fallback", ui-sans-serif, system-ui, sans-serif; }
