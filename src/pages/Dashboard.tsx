@@ -67,10 +67,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ courses, lectures, pdfs, s
       </header>
 
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 analytics-stagger">
-        <div className="analytics-stat"><span className="analytics-stat-icon blue"><Clock3 /></span><p>Total study time</p><strong>{formatDuration(totalSeconds)}</strong><small>Across completed sessions</small></div>
-        <div className="analytics-stat"><span className="analytics-stat-icon violet"><BookOpen /></span><p>Pages confirmed</p><strong>{overall.studiedPages.toLocaleString()}</strong><small>Unique first-time pages</small></div>
-        <div className="analytics-stat"><span className="analytics-stat-icon amber"><Flame /></span><p>Current streak</p><strong>{streak.currentStreak} <em>days</em></strong><small>Longest: {streak.longestStreak} days</small></div>
-        <div className="analytics-stat"><span className="analytics-stat-icon teal"><Target /></span><p>Completed sessions</p><strong>{completedSessions.length}</strong><small>{activeCourses.length} active courses</small></div>
+        <div className="analytics-stat analytics-stat--blue"><div className="analytics-stat-top"><span className="analytics-stat-icon blue"><Clock3 /></span><span className="analytics-stat-index">01 / TIME</span></div><p>Total study time</p><strong>{formatDuration(totalSeconds)}</strong><small>Across completed sessions</small><span className="analytics-stat-accent" aria-hidden="true" /></div>
+        <div className="analytics-stat analytics-stat--sky"><div className="analytics-stat-top"><span className="analytics-stat-icon violet"><BookOpen /></span><span className="analytics-stat-index">02 / PAGES</span></div><p>Pages confirmed</p><strong>{overall.studiedPages.toLocaleString()}</strong><small>Unique first-time pages</small><span className="analytics-stat-accent" aria-hidden="true" /></div>
+        <div className="analytics-stat analytics-stat--lime"><div className="analytics-stat-top"><span className="analytics-stat-icon amber"><Flame /></span><span className="analytics-stat-index">03 / HABIT</span></div><p>Current streak</p><strong>{streak.currentStreak} <em>days</em></strong><small>Longest: {streak.longestStreak} days</small><span className="analytics-stat-accent" aria-hidden="true" /></div>
+        <div className="analytics-stat analytics-stat--mint"><div className="analytics-stat-top"><span className="analytics-stat-icon teal"><Target /></span><span className="analytics-stat-index">04 / SESSIONS</span></div><p>Completed sessions</p><strong>{completedSessions.length}</strong><small>{activeCourses.length} active courses</small><span className="analytics-stat-accent" aria-hidden="true" /></div>
       </section>
 
       <section className="grid grid-cols-1 xl:grid-cols-[1.65fr_1fr] gap-5">
