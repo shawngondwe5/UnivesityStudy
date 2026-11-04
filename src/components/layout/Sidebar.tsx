@@ -40,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     >
       {/* App Branding */}
       <div className="sidebar-brand flex items-center gap-3 px-3 md:px-5 py-5 md:py-6 border-b border-slate-100 dark:border-slate-800 justify-center md:justify-start">
-        <div className="sidebar-logo flex items-center justify-center w-10 h-10 rounded-xl bg-blue-600 text-white shrink-0 shadow-sm">
+        <div className="sidebar-logo sidebar-icon-frame flex items-center justify-center w-10 h-10 rounded-xl bg-blue-600 text-white shrink-0 shadow-sm">
           <BookOpen className="w-5 h-5" />
         </div>
         {!isCollapsed && (
@@ -71,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Icon className="w-5 h-5 shrink-0" />
+              <span className="sidebar-nav-icon"><Icon className="w-5 h-5 shrink-0" /></span>
               {!isCollapsed && <span className="hidden md:inline truncate">{item.label}</span>}
             </button>
           );
