@@ -54,7 +54,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ sessions, courses }) =
     <div className="space-y-6 max-w-7xl mx-auto analytics-page">
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 analytics-enter">
         <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-600 dark:text-blue-400 mb-2">Insights & performance</p><h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Study Reports</h1><p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Understand your habits and see where your study time goes.</p></div>
-        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-1 shadow-sm">
+        <div className="week-switcher flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-1 shadow-sm">
           <button type="button" onClick={() => setWeekOffset(offset => offset - 1)} aria-label="Previous week" className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><ChevronLeft className="w-4 h-4" /></button>
           <span className="text-xs font-semibold px-2 text-slate-700 dark:text-slate-200 whitespace-nowrap">{startLabel} – {endLabel}</span>
           <button type="button" onClick={() => setWeekOffset(offset => Math.min(0, offset + 1))} disabled={weekOffset >= 0} aria-label="Next week" className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
