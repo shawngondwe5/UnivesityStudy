@@ -96,7 +96,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
 
       {activeCourses.length === 0 ? (
         <div className="p-12 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-          <GraduationCap className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+          <span className="courses-empty-icon"><GraduationCap /></span>
           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">No courses yet</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-5">
             Add your university courses to begin structuring your academic materials.
@@ -135,8 +135,8 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="min-w-0 text-base font-bold text-slate-900 dark:text-white truncate">
-                      <span className="text-left">{course.name}</span>
+                    <h3 className="min-w-0 flex-1 text-base font-bold text-slate-900 dark:text-white truncate">
+                      <span className="course-card-title-icon"><GraduationCap /></span><span className="text-left">{course.name}</span>
                     </h3>
                     <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
                       <button
@@ -171,11 +171,11 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                     <span className="text-slate-500">
                       {courseLectures.length} lectures &bull; {coursePdfs.length} PDFs
                     </span>
-                    <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                    <span className="course-progress-value font-mono font-bold text-blue-600 dark:text-blue-400">
                       {progress}%
                     </span>
                   </div>
-                  <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden course-progress-track">
                     <div
                       className="h-full bg-blue-600 rounded-full"
                       style={{ width: `${progress}%` }}
