@@ -62,10 +62,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ sessions, courses }) =
       </header>
 
       <section className="grid grid-cols-2 xl:grid-cols-4 gap-3 analytics-stagger">
-        <div className="analytics-stat"><span className="analytics-stat-icon blue"><Clock3 /></span><p>Study time</p><strong>{formatDuration(totalSeconds)}</strong><small>Selected week</small></div>
-        <div className="analytics-stat"><span className="analytics-stat-icon violet"><BookOpen /></span><p>Confirmed pages</p><strong>{pagesStudied.toLocaleString()}</strong><small>First-time reading</small></div>
-        <div className="analytics-stat"><span className="analytics-stat-icon teal"><Layers3 /></span><p>Sessions</p><strong>{weekSessions.length}</strong><small>Completed sessions</small></div>
-        <div className="analytics-stat"><span className="analytics-stat-icon amber"><CalendarDays /></span><p>Active days</p><strong>{new Set(weekSessions.map(session => session.dateKey)).size} <em>/ 7</em></strong><small>Days with study activity</small></div>
+        <div className="analytics-stat analytics-stat--blue"><div className="analytics-stat-top"><span className="analytics-stat-icon blue"><Clock3 /></span><span className="analytics-stat-index">01 / FOCUS</span></div><p>Study time</p><strong>{formatDuration(totalSeconds)}</strong><small>Selected week</small><span className="analytics-stat-accent" aria-hidden="true" /></div>
+        <div className="analytics-stat analytics-stat--sky"><div className="analytics-stat-top"><span className="analytics-stat-icon violet"><BookOpen /></span><span className="analytics-stat-index">02 / READING</span></div><p>Confirmed pages</p><strong>{pagesStudied.toLocaleString()}</strong><small>First-time reading</small><span className="analytics-stat-accent" aria-hidden="true" /></div>
+        <div className="analytics-stat analytics-stat--mint"><div className="analytics-stat-top"><span className="analytics-stat-icon teal"><Layers3 /></span><span className="analytics-stat-index">03 / ACTIVITY</span></div><p>Sessions</p><strong>{weekSessions.length}</strong><small>Completed sessions</small><span className="analytics-stat-accent" aria-hidden="true" /></div>
+        <div className="analytics-stat analytics-stat--lime"><div className="analytics-stat-top"><span className="analytics-stat-icon amber"><CalendarDays /></span><span className="analytics-stat-index">04 / CONSISTENCY</span></div><p>Active days</p><strong>{new Set(weekSessions.map(session => session.dateKey)).size} <em>/ 7</em></strong><small>Days with study activity</small><span className="analytics-stat-accent" aria-hidden="true" /></div>
       </section>
 
       <section className="analytics-card p-5 sm:p-6">
