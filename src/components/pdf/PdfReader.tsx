@@ -186,7 +186,8 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
   const [showResumeModal, setShowResumeModal] = useState<boolean>(false);
   const [selectedText, setSelectedText] = useState<{ text: string; contextText: string; pageNumber: number; top: number; left: number; rects: { x: number; y: number; w: number; h: number }[] } | null>(null);
-  const [selectionPanel, setSelectionPanel] = useState<'actions' | 'note' | 'summary' | null>(null);
+  const [selectionPanel, setSelectionPanel] = useState<'actions' | 'note' | 'ai-options' | 'summary' | null>(null);
+  const [selectedAiMode, setSelectedAiMode] = useState<'explain' | 'meaning' | 'summarize'>('explain');
   const [summary, setSummary] = useState('');
   const [summaryError, setSummaryError] = useState('');
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -360,21 +361,23 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     setNoteEditDraft('');
   };
 
-  const handleSummarizeSelection = async () => {
+  const handleSummarizeSelection = async (mode: 'explain' | 'meaning' | 'summarize' = selectedAiMode) => {
     if (!selectedText) return;
+    setSelectedAiMode(mode);
     setSelectionPanel('summary');
     setIsSummarizing(true);
     setSummary('');
     setSummaryError('');
     try {
-      const response = await fetch('/api/ai/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: selectedText.text, context: selectedText.contextText, pageNumber: selectedText.pageNumber, documentName: pdfDoc.filename, mode: 'explain' }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'The summary could not be generated.');
-      const explanation = stripAiFormatting(typeof data.summary === 'string' ? data.summary : ''); setSummary(explanation);
+      const response = await fetch('/api/ai/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: selectedText.text, context: selectedText.contextText, pageNumber: selectedText.pageNumber, documentName: pdfDoc.filename, mode }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `AI request failed (HTTP ${response.status}). Check that the server has a valid GEMINI_API_KEY.`);
+      if (typeof data.summary !== 'string' || !data.summary.trim()) throw new Error('The AI returned an empty answer. Please try again.');
+      const explanation = stripAiFormatting(data.summary); setSummary(explanation);
       const now = Date.now(); const note: StudyNote = { id: crypto.randomUUID(), pdfId: pdfDoc.id, pageNumber: selectedText.pageNumber, selectedText: selectedText.text, contextText: selectedText.contextText, noteText: '', aiExplanation: explanation, highlight: { color: noteColor, rects: selectedText.rects }, createdAt: now, updatedAt: now };
       await db.notes.add(note); openNotePopup(note.id, 'edit'); setSelectionPanel(null); setSelectedText(null); window.getSelection()?.removeAllRanges();
     } catch (error) {
-      setSummaryError(error instanceof Error ? error.message : 'The summary could not be generated.');
+      setSummaryError(error instanceof Error ? error.message : 'The AI request failed. Please try again.');
     } finally {
       setIsSummarizing(false);
     }
@@ -1236,14 +1239,20 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         <div className="pdf-selection-popover" style={{ top: Math.max(12, selectedText.top - 58), left: Math.max(12, Math.min(selectedText.left, window.innerWidth - 290)) }} aria-label="Selected text actions">
           {selectionPanel === 'actions' && <div className="flex items-center gap-1" onMouseDown={event => event.preventDefault()}>
             <button type="button" onClick={handleCreateSelectedNote} className="pdf-selection-action"><StickyNote className="h-4 w-4" /><span>Add note</span></button>
-            <button type="button" onClick={handleSummarizeSelection} className="pdf-selection-action pdf-selection-ai"><Sparkles className="h-4 w-4" /><span>Explain simply</span></button>
+            <button type="button" onClick={() => setSelectionPanel('ai-options')} className="pdf-selection-action pdf-selection-ai"><Sparkles className="h-4 w-4" /><span>AI</span></button>
             <button type="button" onClick={() => { setSelectionPanel(null); setSelectedText(null); }} className="pdf-selection-close" aria-label="Hide selection actions" title="Hide"><X className="h-4 w-4" /></button>
           </div>}
+          {selectionPanel === 'ai-options' && <div className="w-72 max-w-[calc(100vw-48px)] space-y-2" onMouseDown={event => event.preventDefault()}>
+            <div className="flex items-center justify-between gap-2"><strong className="text-xs flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> What should AI do?</strong><button type="button" onClick={() => setSelectionPanel('actions')} aria-label="Back to selection actions"><X className="h-4 w-4" /></button></div>
+            <button type="button" onClick={() => handleSummarizeSelection('explain')} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:border-sky-400 hover:bg-sky-50">Simple English <span className="mt-0.5 block font-normal text-slate-500">Explain the selected passage in easy words</span></button>
+            <button type="button" onClick={() => handleSummarizeSelection('meaning')} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:border-sky-400 hover:bg-sky-50">Meaning of a word <span className="mt-0.5 block font-normal text-slate-500">Define the selected word or phrase in context</span></button>
+            <button type="button" onClick={() => handleSummarizeSelection('summarize')} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:border-sky-400 hover:bg-sky-50">Summary <span className="mt-0.5 block font-normal text-slate-500">Give only the main points</span></button>
+          </div>}
           {selectionPanel === 'summary' && <div className="w-80 max-w-[calc(100vw-48px)] space-y-2">
-            <div className="flex items-center justify-between gap-2"><strong className="text-xs flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> AI explanation</strong><button type="button" onClick={() => setSelectionPanel('actions')} aria-label="Back to selection actions"><X className="h-4 w-4" /></button></div>
-            {isSummarizing ? <p className="text-xs text-slate-500">Reading the selected passage…</p> : summaryError ? <p className="text-xs text-rose-600">{summaryError}</p> : <p className="ai-text whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{stripAiFormatting(summary)}</p>}
+            <div className="flex items-center justify-between gap-2"><strong className="text-xs flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> {selectedAiMode === 'meaning' ? 'Word meaning' : selectedAiMode === 'summarize' ? 'Summary' : 'Simple English'}</strong><button type="button" onClick={() => setSelectionPanel('ai-options')} aria-label="Back to AI choices"><X className="h-4 w-4" /></button></div>
+            {isSummarizing ? <p className="text-xs text-slate-500">AI is working…</p> : summaryError ? <p className="text-xs text-rose-600">{summaryError}</p> : <p className="ai-text whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{stripAiFormatting(summary)}</p>}
             {!isSummarizing && !summaryError && summary && <button type="button" onClick={() => { setSelectionPanel(null); setSelectedText(null); window.getSelection()?.removeAllRanges(); }} className="pdf-selection-save">Done</button>}
-            {summaryError && <button type="button" onClick={handleSummarizeSelection} className="pdf-selection-save">Try again</button>}
+            {summaryError && <button type="button" onClick={() => handleSummarizeSelection(selectedAiMode)} className="pdf-selection-save">Try again</button>}
           </div>}
         </div>
       )}
