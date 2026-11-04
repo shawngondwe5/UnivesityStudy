@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GoogleGenAI } from '@google/genai';
@@ -69,10 +70,15 @@ app.post('/api/ai/summarize', async (req, res) => {
   }
 });
 
-if (process.env.NODE_ENV === 'production' || process.env.K_SERVICE) {
+const productionIndex = path.join(rootDir, 'dist', 'index.html');
+
+if ((process.env.NODE_ENV === 'production' || process.env.K_SERVICE) && existsSync(productionIndex)) {
   app.use(express.static(path.join(rootDir, 'dist')));
-  app.get('*', (_req, res) => res.sendFile(path.join(rootDir, 'dist', 'index.html')));
+  app.get('*', (_req, res) => res.sendFile(productionIndex));
 } else {
+  if (process.env.NODE_ENV === 'production' || process.env.K_SERVICE) {
+    console.warn('Production build not found at dist/index.html; starting Vite middleware for the AI Studio preview.');
+  }
   const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
   app.use(vite.middlewares);
 }
