@@ -112,10 +112,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ courses, lectures, pdfs, s
           const coursePdfs = activePdfs.filter(pdf => pdf.courseId === course.id);
           const courseLectures = lectures.filter(lecture => lecture.courseId === course.id && !lecture.isDeleted);
           const progress = calculateCourseProgress(coursePdfs);
-          return <button key={course.id} type="button" onClick={() => onOpenCourse(course.id)} className="course-progress-item text-left">
-            <div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-slate-900 dark:text-white truncate">{course.name}</span><span className="text-xs font-bold text-blue-600 dark:text-blue-400">{progress}%</span></div>
+          return <button key={course.id} type="button" onClick={() => onOpenCourse(course.id)} className="course-progress-item course-progress-item--refined text-left">
+            <div className="flex items-center gap-3"><span className="course-mini-icon"><BookOpen /></span><span className="min-w-0 flex-1 text-sm font-semibold text-slate-900 dark:text-white truncate">{course.name}</span><span className="course-progress-value">{progress}%</span></div>
             <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden mt-3"><div className="h-full rounded-full bg-blue-600 progress-fill" style={{ width: `${progress}%` }} /></div>
-            <p className="text-[11px] text-slate-500 mt-2">{courseLectures.length} lectures · {coursePdfs.length} PDFs</p>
+            <div className="flex items-center justify-between gap-2 mt-3"><p className="text-[11px] text-slate-500">{courseLectures.length} lectures · {coursePdfs.length} PDFs</p><span className="course-open-hint">Open <ArrowRight /></span></div>
           </button>;
         })}</div>}
       </section>
