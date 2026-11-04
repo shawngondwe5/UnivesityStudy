@@ -29,6 +29,7 @@ app.post('/api/ai/summarize', async (req, res) => {
   }
 
   const selectedText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  const context = typeof req.body?.context === 'string' ? req.body.context.trim().slice(0, 1600) : '';
   const pageNumber = Number.isInteger(req.body?.pageNumber) ? req.body.pageNumber : null;
   const documentName = typeof req.body?.documentName === 'string' ? req.body.documentName.slice(0, 160) : 'PDF document';
   if (!selectedText) return res.status(400).json({ error: 'Select some PDF text first.' });
@@ -37,12 +38,18 @@ app.post('/api/ai/summarize', async (req, res) => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const mode = req.body?.mode === 'explain' ? 'explain' : 'summarize';
+    const looksLikeQuestion = /\?\s*$/.test(selectedText) || /^(what|why|how|when|where|who|which|is|are|was|were|do|does|did|can|could|would|should|will|define|explain|describe|name|list)\b/i.test(selectedText);
+    const isShortSelection = selectedText.split(/\s+/).filter(Boolean).length <= 4;
     const instruction = mode === 'explain'
-      ? 'Explain the selected passage in very simple, everyday English for a university student. Be brief: use 2-4 short sentences and stay under 70 words. Explain only the main idea and define a difficult term only if it is necessary to understand the passage. Do not add facts, examples, background information, introductions, or repeated points that are not needed. Preserve the original meaning.'
+      ? (looksLikeQuestion
+        ? 'The selected text is a QUESTION. Answer the question directly; do not explain or paraphrase the question. Give the correct answer in very simple everyday English, in 1-3 short sentences (maximum 70 words). Use the surrounding page context when it helps. If the page does not contain enough information, answer from reliable general knowledge and say briefly if something is uncertain.'
+        : isShortSelection
+          ? 'The selected text is a WORD or SHORT PHRASE. Explain what it means in very simple everyday English. Give a clear definition and, when surrounding context is available, explain what it means in this specific passage. If it is one word, do not summarize it as a passage or merely repeat it. Use 1-3 short sentences (maximum 70 words).'
+          : 'Explain the selected passage in very simple, everyday English for a university student. Be brief: use 2-4 short sentences and stay under 70 words. Explain only the main idea and define a difficult term only if it is necessary to understand the passage. Do not add facts, examples, background information, introductions, or repeated points that are not needed. Preserve the original meaning.')
       : 'Summarize the selected passage in very simple, everyday English. Be brief: use no more than 3 short bullet points and stay under 70 words. Include only the most important ideas. Do not add facts, examples, background information, introductions, or repeated points. Preserve the original meaning.';
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `You are a clear, careful university study assistant. ${instruction}\n\nDocument: ${documentName}\nPage: ${pageNumber ?? 'unknown'}\n\nSelected passage:\n${selectedText}`
+      contents: `You are a clear, careful university study assistant. ${instruction}\n\nDocument: ${documentName}\nPage: ${pageNumber ?? 'unknown'}\n\nSurrounding page context (use only when relevant):\n${context || '(not available)'}\n\nSelected text:\n${selectedText}`
     });
     const summary = response.text?.trim();
     if (!summary) return res.status(502).json({ error: 'The AI returned an empty summary. Please try again.' });

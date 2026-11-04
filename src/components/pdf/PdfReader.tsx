@@ -185,7 +185,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   // Modals
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
   const [showResumeModal, setShowResumeModal] = useState<boolean>(false);
-  const [selectedText, setSelectedText] = useState<{ text: string; pageNumber: number; top: number; left: number; rects: { x: number; y: number; w: number; h: number }[] } | null>(null);
+  const [selectedText, setSelectedText] = useState<{ text: string; contextText: string; pageNumber: number; top: number; left: number; rects: { x: number; y: number; w: number; h: number }[] } | null>(null);
   const [selectionPanel, setSelectionPanel] = useState<'actions' | 'note' | 'summary' | null>(null);
   const [summary, setSummary] = useState('');
   const [summaryError, setSummaryError] = useState('');
@@ -285,7 +285,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const cancelNoteEdit = () => { const note = notes.find(item => item.id === activeNotePopup?.noteId); setNoteEditDraft(note?.noteText || ''); setNotePopupMode('info'); };
   const explainNote = async (note: StudyNote) => {
     try {
-      const response = await fetch('/api/ai/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: note.selectedText, pageNumber: note.pageNumber, documentName: pdfDoc.filename, mode: 'explain' }) });
+      const response = await fetch('/api/ai/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: note.selectedText, context: note.contextText, pageNumber: note.pageNumber, documentName: pdfDoc.filename, mode: 'explain' }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not generate an explanation.');
       await db.notes.update(note.id, { aiExplanation: stripAiFormatting(typeof data.summary === 'string' ? data.summary : ''), updatedAt: Date.now() });
@@ -314,7 +314,12 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       const pageElement = textLayer.closest<HTMLElement>('.page[data-page-number]'); const pageNumber = Number(pageElement?.dataset.pageNumber || currentPage);
       const viewport = pdfViewerRef.current?.getPageView(pageNumber - 1)?.viewport; const pageRect = pageElement?.getBoundingClientRect();
       const rects = viewport && pageRect ? Array.from(range.getClientRects()).map(r => { const sx = viewport.width / pageRect.width, sy = viewport.height / pageRect.height; const a = viewport.convertToPdfPoint((r.left-pageRect.left)*sx,(r.top-pageRect.top)*sy); const b = viewport.convertToPdfPoint((r.right-pageRect.left)*sx,(r.bottom-pageRect.top)*sy); return { x: Math.min(a[0],b[0]), y: Math.min(a[1],b[1]), w: Math.abs(b[0]-a[0]), h: Math.abs(b[1]-a[1]) }; }).filter(r => r.w > 0 && r.h > 0) : [];
-      setSelectedText({ text: text.slice(0, 12000), pageNumber, top: rect.top, left: rect.left, rects });
+      const pageText = (textLayer.textContent || '').replace(/\s+/g, ' ').trim();
+      const selectedIndex = pageText.toLocaleLowerCase().indexOf(text.toLocaleLowerCase());
+      const contextText = selectedIndex >= 0
+        ? pageText.slice(Math.max(0, selectedIndex - 240), Math.min(pageText.length, selectedIndex + text.length + 240)).trim()
+        : '';
+      setSelectedText({ text: text.slice(0, 12000), contextText, pageNumber, top: rect.top, left: rect.left, rects });
       setSelectionPanel('actions');
     };
     const handleOutsidePointer = (event: PointerEvent) => {
@@ -341,6 +346,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       pdfId: pdfDoc.id,
       pageNumber: selectedText.pageNumber,
       selectedText: selectedText.text,
+      contextText: selectedText.contextText,
       noteText: '',
       highlight: { color: noteColor, rects: selectedText.rects },
       createdAt: now,
@@ -361,11 +367,11 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     setSummary('');
     setSummaryError('');
     try {
-      const response = await fetch('/api/ai/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: selectedText.text, pageNumber: selectedText.pageNumber, documentName: pdfDoc.filename, mode: 'explain' }) });
+      const response = await fetch('/api/ai/summarize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: selectedText.text, context: selectedText.contextText, pageNumber: selectedText.pageNumber, documentName: pdfDoc.filename, mode: 'explain' }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'The summary could not be generated.');
       const explanation = stripAiFormatting(typeof data.summary === 'string' ? data.summary : ''); setSummary(explanation);
-      const now = Date.now(); const note: StudyNote = { id: crypto.randomUUID(), pdfId: pdfDoc.id, pageNumber: selectedText.pageNumber, selectedText: selectedText.text, noteText: '', aiExplanation: explanation, highlight: { color: noteColor, rects: selectedText.rects }, createdAt: now, updatedAt: now };
+      const now = Date.now(); const note: StudyNote = { id: crypto.randomUUID(), pdfId: pdfDoc.id, pageNumber: selectedText.pageNumber, selectedText: selectedText.text, contextText: selectedText.contextText, noteText: '', aiExplanation: explanation, highlight: { color: noteColor, rects: selectedText.rects }, createdAt: now, updatedAt: now };
       await db.notes.add(note); openNotePopup(note.id, 'edit'); setSelectionPanel(null); setSelectedText(null); window.getSelection()?.removeAllRanges();
     } catch (error) {
       setSummaryError(error instanceof Error ? error.message : 'The summary could not be generated.');
