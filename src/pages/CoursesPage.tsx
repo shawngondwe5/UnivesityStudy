@@ -136,7 +136,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                 <div>
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="min-w-0 flex-1 text-base font-bold text-slate-900 dark:text-white truncate">
-                      <span className="course-card-title-icon"><GraduationCap /></span><span className="text-left">{course.name}</span>
+                      <span className="course-card-title-icon"><GraduationCap /></span><span className="text-left min-w-0 truncate">{course.name}</span>
                     </h3>
                     <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
                       <button
