@@ -62,8 +62,8 @@ app.post('/api/ai/summarize', async (req, res) => {
     const rawMessage = error instanceof Error ? error.message : 'Unknown AI service error';
     const safeMessage = rawMessage
       .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[API key hidden]')
-      .replace(/Bearer\\s+\\S+/gi, 'Bearer [hidden]')
-      .replace(/[\\r\\n]+/g, ' ')
+      .replace(/Bearer\s+\S+/gi, 'Bearer [hidden]')
+      .replace(/[\r\n]+/g, ' ')
       .slice(0, 240);
     return res.status(502).json({ error: `AI request failed: ${safeMessage || 'The AI provider returned an unknown error.'}` });
   }
