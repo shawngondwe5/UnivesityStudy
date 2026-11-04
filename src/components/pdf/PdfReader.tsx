@@ -156,6 +156,8 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   const [pdfProxy, setPdfProxy] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(pdfDoc.lastPositionPage || 1);
   const [totalPages, setTotalPages] = useState<number>(pdfDoc.totalPages || 1);
+  // The PDF file itself is the source of truth; saved metadata can be stale.
+  const actualPageCountRef = useRef<number>(pdfDoc.totalPages || 1);
   const [scale, setScale] = useState<number>(1.2);
   const [zoomMode, setZoomMode] = useState('page-width');
   const [readingMode, setReadingMode] = useState<'single' | 'continuous'>(settings.defaultReadingMode || 'single');
@@ -402,6 +404,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         if (!isCancelled) {
           setPdfProxy(proxy);
           setTotalPages(proxy.numPages);
+          actualPageCountRef.current = proxy.numPages;
           const savedPosition = Math.min(Math.max(1, pdfDoc.lastPositionPage || 1), proxy.numPages);
           setCurrentPage(savedPosition);
           setVisitedPages([savedPosition]);
@@ -462,7 +465,8 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   // Moving through a document only saves the resume position.
   const handlePageChange = useCallback(
     async (newPage: number) => {
-      if (newPage < 1 || newPage > totalPages) return;
+      const pageCount = actualPageCountRef.current;
+      if (!Number.isInteger(newPage) || newPage < 1 || newPage > pageCount) return;
 
       setVisitedPages(prev => (prev.includes(newPage) ? prev : [...prev, newPage]));
 
@@ -479,7 +483,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         console.error('Failed to update PDF reading position:', err);
       }
     },
-    [pdfDoc.id, totalPages]
+    [pdfDoc.id]
   );
 
   // Synchronize initial page or any direct page change
@@ -516,7 +520,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
     const onPageChanging = (event: any) => {
       const page = Number(event.pageNumber);
-      if (!Number.isFinite(page) || page < 1) return;
+      if (!Number.isInteger(page) || page < 1 || page > pdfProxy.numPages) return;
       setCurrentPage(page);
       setPageInput(String(page));
       handlePageChange(page);
@@ -542,9 +546,13 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
     linkService.setDocument(pdfProxy, null);
 
     const initializeView = () => {
+      // pagesinit guarantees PDF.js has created its page views. Clamp the
+      // saved position against the actual viewer page count, not DB metadata.
+      const pageCount = viewer.pagesCount;
+      if (pageCount < 1) return;
       viewer.currentScaleValue = 'page-width';
-      viewer.currentPageNumber = Math.min(Math.max(1, currentPage), pdfProxy.numPages);
       viewer.scrollMode = readingMode === 'single' ? ScrollMode.PAGE : ScrollMode.VERTICAL;
+      viewer.currentPageNumber = Math.min(Math.max(1, currentPage), pageCount);
     };
     eventBus.on('pagesinit', initializeView);
 
@@ -594,8 +602,10 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   useEffect(() => {
     const viewer = pdfViewerRef.current;
     if (!viewer || !pdfProxy) return;
+    // Do not set currentPageNumber here: this effect also runs immediately
+    // after pdfProxy changes, before PDF.js has populated viewer.pagesCount.
+    // The pagesinit handler sets the initial page once the page views exist.
     viewer.scrollMode = readingMode === 'single' ? ScrollMode.PAGE : ScrollMode.VERTICAL;
-    viewer.currentPageNumber = currentPage;
   }, [readingMode, pdfProxy]);
 
   // PDF.js emits pagechanging only when the active page changes; this avoids
@@ -630,9 +640,10 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   }, [currentPage, totalPages, readingMode, showFinishModal, showResumeModal]);
 
   const navigateToPage = (pageNum: number) => {
-    if (pageNum < 1 || pageNum > totalPages) return;
+    const pageCount = actualPageCountRef.current;
+    if (!Number.isInteger(pageNum) || pageNum < 1 || pageNum > pageCount) return;
     const viewer = pdfViewerRef.current;
-    if (viewer) viewer.currentPageNumber = pageNum;
+    if (viewer?.pagesCount > 0) viewer.currentPageNumber = Math.min(pageNum, viewer.pagesCount);
     setCurrentPage(pageNum);
     setPageInput(String(pageNum));
     handlePageChange(pageNum);
