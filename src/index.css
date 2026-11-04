@@ -950,3 +950,93 @@ button:focus-visible, a:focus-visible { outline: 3px solid #9eea27; outline-offs
 }
 
 .dashboard-hero strong { font-family: cera, "cera Fallback", ui-sans-serif, system-ui, sans-serif; }
+
+/* Consistent rounded-stroke icon language and calmer component spacing. */
+:root {
+  --study-icon-stroke: 1.85;
+  --study-control-radius: 12px;
+  --study-card-radius: 20px;
+  --study-border: #e5edf1;
+  --study-icon-muted: #71818b;
+}
+.study-app-shell svg.lucide {
+  flex-shrink: 0;
+  stroke-width: var(--study-icon-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  shape-rendering: geometricPrecision;
+}
+.study-sidebar svg.lucide { stroke-width: 1.9; }
+.study-sidebar .sidebar-logo svg.lucide { width: 21px; height: 21px; }
+.study-sidebar .sidebar-nav-item svg.lucide { width: 19px; height: 19px; }
+.study-sidebar .sidebar-toggle svg.lucide { width: 18px; height: 18px; }
+
+/* Keep icon-only actions aligned and easy to hit without enlarging their artwork. */
+.study-app-shell button:has(> svg.lucide:only-child),
+.study-app-shell a:has(> svg.lucide:only-child) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.study-app-shell button > svg.lucide,
+.study-app-shell a > svg.lucide,
+.study-app-shell label > svg.lucide {
+  margin-block: 0;
+  vertical-align: middle;
+}
+.study-app-shell button:focus-visible,
+.study-app-shell a:focus-visible,
+.study-app-shell input:focus-visible,
+.study-app-shell textarea:focus-visible,
+.study-app-shell select:focus-visible {
+  outline: 2px solid #35a9d7;
+  outline-offset: 2px;
+}
+
+/* A consistent border and radius rhythm across the main study surfaces. */
+.study-app-shell .analytics-card,
+.study-app-shell .course-progress-item,
+.study-app-shell .course-library-card,
+.study-app-shell .lecture-library-card,
+.study-app-shell .pdf-library-card,
+.study-app-shell .course-overview-stat {
+  border-color: var(--study-border);
+}
+.study-app-shell .analytics-card { border-radius: var(--study-card-radius); }
+.study-app-shell .course-progress-item,
+.study-app-shell .pdf-library-card { border-radius: 15px; }
+.study-app-shell .lecture-library-card { border-radius: 18px; }
+.study-app-shell input:not([type="checkbox"]):not([type="radio"]),
+.study-app-shell textarea,
+.study-app-shell select {
+  border-radius: var(--study-control-radius);
+}
+.study-app-shell button,
+.study-app-shell label[for] {
+  -webkit-tap-highlight-color: transparent;
+}
+.study-app-shell .analytics-stat-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+}
+.study-app-shell .analytics-stat-icon svg.lucide {
+  width: 18px;
+  height: 18px;
+}
+.study-app-shell .analytics-link svg.lucide {
+  width: 14px;
+  height: 14px;
+  transition: transform .2s ease;
+}
+.study-app-shell .analytics-link:hover svg.lucide { transform: translateX(2px); }
+.study-app-shell .hero-cta svg.lucide,
+.study-app-shell .hero-secondary svg.lucide { width: 16px; height: 16px; }
+
+@media (max-width: 640px) {
+  .study-app-shell .analytics-stat-icon { width: 35px; height: 35px; border-radius: 11px; }
+  .study-app-shell .analytics-stat-icon svg.lucide { width: 17px; height: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .study-app-shell .analytics-link svg.lucide { transition: none; }
+}
